@@ -43,7 +43,7 @@ from wt6_config import (
 )
 from wt6_antenna import AntennaConfig, Axis, Direction, EncoderInfo, Position, SafeAntenna, SafetyError, shortest_angle_delta
 from wt6_logging import EventLogger
-from wt6_power import PowerMeterConfig, PowerReading, RtlPowerMeter
+from wt6_b210_power import B210PowerMeter, B210PowerMeterConfig, B210PowerReading
 from wt6_solar import sun_equatorial, sun_position
 from wt6_state import AppStateStore, AntennaRunState, PowerRunState, SystemRunState, antenna_state_from_text
 
@@ -1683,15 +1683,18 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.app = app
         self.stop_event = threading.Event()
         self.thread: Optional[threading.Thread] = None
-        self.meter: Optional[RtlPowerMeter] = None
+        self.meter: Optional[B210PowerMeter] = None
         self.power_values: list[float] = []
+        self.power_b_values: list[float] = []
         self.last_reading_time = 0.0
         self.latest_power_dbfs: Optional[float] = None
+        self.latest_power_b_dbfs: Optional[float] = None
         self.power_started_at = 0.0
         self.warmup_seconds = 0.0
         self.history_values: list[float] = []
         self.history_display_values: list[float] = []
         self.latest_power_value: Optional[float] = None
+        self.latest_power_b_value: Optional[float] = None
         self.latest_power_unit = "dBFS"
         self.latest_power_calibrated = False
         self.latest_power_extrapolated = False
@@ -1704,10 +1707,10 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.freq_var = tk.StringVar(value=f"{power.center_frequency_hz / 1_000_000:0.1f}")
         self.rate_var = tk.StringVar(value=f"{power.sample_rate_hz / 1000:0.0f}")
         self.gain_var = tk.StringVar(value=power.gain_db)
-        self.gain_b_var = tk.StringVar(value=power.gain_db)
+        self.gain_b_var = tk.StringVar(value=power.gain_b_db)
         self.ppm_var = tk.StringVar(value=str(power.frequency_correction_ppm))
-        self.bandwidth_var = tk.StringVar(value=f"{power.sample_rate_hz / 2000:0.0f}")
-        self.clock_var = tk.StringVar(value="Int")
+        self.bandwidth_var = tk.StringVar(value=f"{power.measurement_bandwidth_hz / 1000:0.0f}")
+        self.clock_var = tk.StringVar(value=power.clock_source)
         self.samples_var = tk.StringVar(value=self.samples_display_value(power.samples_per_read))
         self.update_var = tk.StringVar(value=f"{power.update_rate_hz:0.0f}")
         self.smooth_var = tk.StringVar(value=str(power.smoothing_samples))
@@ -1793,32 +1796,40 @@ class PowerMeterPanel(ttk.LabelFrame):
     def power_config_from_fields(self) -> PowerConfig:
         freq_hz = int(round(float(self.freq_var.get()) * 1_000_000))
         sample_rate_hz = int(round(float(self.rate_var.get()) * 1000))
+        bandwidth_hz = int(round(float(self.bandwidth_var.get()) * 1000))
         return PowerConfig(
             center_frequency_hz=freq_hz,
             sample_rate_hz=sample_rate_hz,
+            measurement_bandwidth_hz=bandwidth_hz,
             gain_db=self.gain_var.get().strip() or "auto",
+            gain_b_db=self.gain_b_var.get().strip() or self.gain_var.get().strip() or "auto",
             frequency_correction_ppm=int(self.ppm_var.get() or "0"),
             samples_per_read=self.samples_stored_value(),
             update_rate_hz=float(self.update_var.get()),
             smoothing_samples=max(1, int(self.smooth_var.get())),
             warmup_seconds=max(0.0, float(self.warmup_var.get())),
+            clock_source=self.clock_var.get().strip() or "internal",
+            b210_device_args=self.app.power_config.b210_device_args,
         )
 
-    def meter_config_from_fields(self) -> PowerMeterConfig:
+    def meter_config_from_fields(self) -> B210PowerMeterConfig:
         power = self.power_config_from_fields()
-        gain_text = self.gain_var.get().strip().lower()
-        gain = None if gain_text in ("", "auto") else float(gain_text)
+        gain_a_text = self.gain_var.get().strip().lower()
+        gain_b_text = self.gain_b_var.get().strip().lower()
+        if gain_a_text in ("", "auto") or gain_b_text in ("", "auto"):
+            raise ValueError("B210 power requires numeric gain values for both channels")
         samples_text = power.samples_per_read.strip().lower()
         samples = None if samples_text in ("", "auto", "0") else int(samples_text)
-        config = PowerMeterConfig(
+        config = B210PowerMeterConfig(
             center_frequency_hz=power.center_frequency_hz,
             sample_rate_hz=power.sample_rate_hz,
-            measurement_bandwidth_hz=power.sample_rate_hz,
+            measurement_bandwidth_hz=power.measurement_bandwidth_hz,
             update_rate_hz=power.update_rate_hz,
-            gain_db=gain,
-            frequency_correction_ppm=power.frequency_correction_ppm,
-            smoothing_samples=power.smoothing_samples,
+            gain_a_db=float(gain_a_text),
+            gain_b_db=float(gain_b_text),
             samples_per_read=samples,
+            clock_source=power.clock_source,
+            device_args=power.b210_device_args,
         )
         config.validate()
         return config
@@ -1834,12 +1845,13 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.freq_var.set(f"{power.center_frequency_hz / 1_000_000:0.1f}")
         self.rate_var.set(f"{power.sample_rate_hz / 1000:0.0f}")
         self.gain_var.set(power.gain_db)
-        self.gain_b_var.set(power.gain_db)
+        self.gain_b_var.set(power.gain_b_db)
         self.ppm_var.set(str(power.frequency_correction_ppm))
-        self.bandwidth_var.set(f"{power.sample_rate_hz / 2000:0.0f}")
+        self.bandwidth_var.set(f"{power.measurement_bandwidth_hz / 1000:0.0f}")
         self.samples_var.set(self.samples_display_value(power.samples_per_read))
         self.update_var.set(f"{power.update_rate_hz:0.0f}")
         self.smooth_var.set(str(power.smoothing_samples))
+        self.clock_var.set(power.clock_source)
         self.warmup_var.set(f"{power.warmup_seconds:0.0f}")
 
     def start_log(self) -> None:
@@ -1867,7 +1879,9 @@ class PowerMeterPanel(ttk.LabelFrame):
             "local_time",
             "utc_time",
             "power_dbfs",
+            "power_b_dbfs",
             "power_value",
+            "power_b_value",
             "power_unit",
             "power_calibrated",
             "power_extrapolated",
@@ -1879,7 +1893,7 @@ class PowerMeterPanel(ttk.LabelFrame):
             header.extend([f"{name}_az", f"{name}_el", f"{name}_raw_az", f"{name}_raw_el"])
         return header
 
-    def log_reading(self, power_dbfs: float) -> None:
+    def log_reading(self, power_dbfs: float, power_b_dbfs: Optional[float] = None) -> None:
         if not self.log_writer:
             return
         now_local = datetime.now().astimezone()
@@ -1889,7 +1903,9 @@ class PowerMeterPanel(ttk.LabelFrame):
             now_local.isoformat(timespec="milliseconds"),
             now_utc.isoformat(timespec="milliseconds"),
             f"{power_dbfs:0.2f}",
+            f"{power_b_dbfs:0.2f}" if power_b_dbfs is not None else "",
             f"{self.latest_power_value:0.2f}" if self.latest_power_value is not None else "",
+            f"{self.latest_power_b_value:0.2f}" if self.latest_power_b_value is not None else "",
             self.latest_power_unit,
             "yes" if self.latest_power_calibrated else "no",
             "yes" if self.latest_power_extrapolated else "no",
@@ -1915,45 +1931,39 @@ class PowerMeterPanel(ttk.LabelFrame):
             self.log_handle.flush()
 
     def start(self) -> None:
+        if self.thread and self.thread.is_alive():
+            self.status_var.set("SDR POWER ON")
+            return
         try:
             power_config = self.power_config_from_fields()
+            meter_config = self.meter_config_from_fields()
         except Exception as exc:
             self.status_var.set(str(exc))
             return
         self.app.power_config = power_config
         self.format_fields(power_config)
         save_power_config(self.app.config_path, self.app.power_config)
-        self.power_values.clear()
-        self.history_values.clear()
-        self.history_display_values.clear()
-        self.last_reading_time = 0.0
-        self.power_started_at = 0.0
+        self.reset_measurements(clear_history=True)
         self.warmup_seconds = power_config.warmup_seconds
         self.active_calibration = None
-        self.latest_power_dbfs = None
-        self.latest_power_value = None
-        self.latest_power_unit = "dBFS"
-        self.latest_power_calibrated = False
-        self.latest_power_extrapolated = False
-        self.power_var.set("--.- dBFS")
-        self.power_b_var.set("--.- dBFS")
-        self.stats_var.set("Avg -- Min -- Max --")
-        self.stats_b_var.set("Avg -- Min -- Max --")
-        self.stop_event.set()
-        self.thread = None
-        self.meter = None
-        self.status_var.set("B210 BACKEND PENDING")
-        self.owner_var.set("B210 power measurement is not connected yet; no RTL-SDR will be opened.")
-        self.app.state_store.reset_power("B210 backend pending")
+        self.stop_event.clear()
+        self.power_started_at = 0.0
+        self.status_var.set("Starting B210...")
+        self.owner_var.set("WT6 owns B210 while SDR power is on")
+        self.app.state_store.set_power(PowerRunState.STARTING, message="Starting B210")
+        self.thread = threading.Thread(target=self.power_loop, args=(meter_config,), name="B210PowerMeter", daemon=True)
+        self.thread.start()
         self.app.event_log.info(
-            "B210_POWER_BACKEND_PENDING",
+            "B210_POWER_START",
             frequency_hz=power_config.center_frequency_hz,
             sample_rate_hz=power_config.sample_rate_hz,
+            bandwidth_hz=power_config.measurement_bandwidth_hz,
             gain_a=self.gain_var.get().strip(),
             gain_b=self.gain_b_var.get().strip(),
-            bandwidth_khz=self.bandwidth_var.get().strip(),
             update_rate_hz=power_config.update_rate_hz,
+            clock=power_config.clock_source,
         )
+
     def stop(self) -> None:
         self.stop_event.set()
         if self.thread and self.thread.is_alive():
@@ -1966,12 +1976,14 @@ class PowerMeterPanel(ttk.LabelFrame):
             self.meter = None
             self.status_var.set("SDR RELEASED")
             self.owner_var.set("SDR released for other apps")
+            self.app.state_store.reset_power("SDR RELEASED")
         self.app.event_log.info("B210_POWER_UI_STOP")
 
-    def power_loop(self, config: PowerMeterConfig) -> None:
+    def power_loop(self, config: B210PowerMeterConfig) -> None:
         try:
-            with RtlPowerMeter(config) as meter:
+            with B210PowerMeter(config) as meter:
                 self.meter = meter
+                self.power_started_at = time.monotonic()
                 self.app.events.put(("ok", self.refresh_warmup_status, None))
                 while not self.stop_event.is_set():
                     reading = meter.read_power()
@@ -1983,25 +1995,30 @@ class PowerMeterPanel(ttk.LabelFrame):
             self.meter = None
             self.app.events.put(("ok", self.finish_stopped, None))
 
-    def update_power(self, reading: PowerReading) -> None:
+    def update_power(self, reading: B210PowerReading) -> None:
         try:
             smoothing = max(1, int(self.smooth_var.get()))
         except ValueError:
             smoothing = 1
-        self.power_values.append(reading.power_dbfs)
+        self.power_values.append(reading.power_a_dbfs)
+        self.power_b_values.append(reading.power_b_dbfs)
         self.last_reading_time = time.monotonic()
         self.power_values = self.power_values[-smoothing:]
-        average = sum(self.power_values) / len(self.power_values)
-        self.latest_power_dbfs = average
-        measurement = self.display_measurement(average)
+        self.power_b_values = self.power_b_values[-smoothing:]
+        average_a = sum(self.power_values) / len(self.power_values)
+        average_b = sum(self.power_b_values) / len(self.power_b_values)
+        self.latest_power_dbfs = average_a
+        self.latest_power_b_dbfs = average_b
+        measurement = self.display_measurement(average_a)
         self.latest_power_value = float(measurement["power_value"])
+        self.latest_power_b_value = average_b
         self.latest_power_unit = str(measurement["power_unit"])
         self.latest_power_calibrated = bool(measurement["power_calibrated"])
         self.latest_power_extrapolated = bool(measurement["power_extrapolated"])
         suffix = " EXT" if self.latest_power_extrapolated else ""
         self.power_var.set(f"{self.latest_power_value:0.1f} {self.latest_power_unit}{suffix}")
-        self.power_b_var.set("--.- dBFS")
-        self.history_values.append(average)
+        self.power_b_var.set(f"{average_b:0.1f} dBFS")
+        self.history_values.append(average_a)
         self.history_values = self.history_values[-600:]
         self.history_display_values.append(self.latest_power_value)
         self.history_display_values = self.history_display_values[-600:]
@@ -2010,8 +2027,9 @@ class PowerMeterPanel(ttk.LabelFrame):
             f"Avg {history_average:0.1f} Min {min(self.history_display_values):0.1f} "
             f"Max {max(self.history_display_values):0.1f}"
         )
-        self.stats_b_var.set("Avg -- Min -- Max --")
-        self.log_reading(average)
+        history_b = self.power_b_values[-600:]
+        self.stats_b_var.set(f"Avg {sum(history_b) / len(history_b):0.1f} Min {min(history_b):0.1f} Max {max(history_b):0.1f}")
+        self.log_reading(average_a, average_b)
         self.refresh_warmup_status(None)
         self.app.state_store.set_power(
             run_state=PowerRunState.WARMING if self.is_warming() else PowerRunState.READY,
@@ -2083,36 +2101,42 @@ class PowerMeterPanel(ttk.LabelFrame):
     def calibration_status_suffix(self) -> str:
         if self.latest_power_calibrated or self.active_calibration:
             return "CAL EXT" if self.latest_power_extrapolated else "CAL"
-        power = self.app.power_config
-        if normalize_rtl_gain(power.gain_db) == "auto":
-            return "UNCAL AUTO GAIN"
         return "UNCAL"
 
     def set_status(self, text: str) -> None:
         self.status_var.set(f"SDR FAULT: {text}")
         self.owner_var.set("SDR fault; release before other apps use B210")
         self.app.state_store.set_power(PowerRunState.FAULT, message=text)
+        self.app.event_log.error("B210_POWER_FAULT", error=text)
 
     def finish_stopped(self, _unused: object) -> None:
         self.thread = None
         if self.stop_event.is_set():
-            self.power_values.clear()
-            self.history_values.clear()
-            self.history_display_values.clear()
-            self.last_reading_time = 0.0
-            self.latest_power_dbfs = None
-            self.latest_power_value = None
-            self.latest_power_unit = "dBFS"
-            self.latest_power_calibrated = False
-            self.latest_power_extrapolated = False
+            self.reset_measurements(clear_history=True)
             self.active_calibration = None
-            self.power_var.set("--.- dBFS")
-            self.power_b_var.set("--.- dBFS")
-            self.stats_var.set("Avg -- Min -- Max --")
-            self.stats_b_var.set("Avg -- Min -- Max --")
             self.status_var.set("SDR RELEASED")
             self.owner_var.set("SDR released for other apps")
             self.app.state_store.reset_power("SDR RELEASED")
+
+    def reset_measurements(self, clear_history: bool = False) -> None:
+        self.power_values.clear()
+        self.power_b_values.clear()
+        self.last_reading_time = 0.0
+        self.latest_power_dbfs = None
+        self.latest_power_b_dbfs = None
+        self.latest_power_value = None
+        self.latest_power_b_value = None
+        self.latest_power_unit = "dBFS"
+        self.latest_power_calibrated = False
+        self.latest_power_extrapolated = False
+        self.power_var.set("--.- dBFS")
+        self.power_b_var.set("--.- dBFS")
+        self.stats_var.set("Avg -- Min -- Max --")
+        self.stats_b_var.set("Avg -- Min -- Max --")
+        if clear_history:
+            self.history_values.clear()
+            self.history_display_values.clear()
+
 class RtlCalibrationDialog(tk.Toplevel):
     LEVELS_DBM = RTL_CAL_LEVELS_DBM
 
@@ -2191,10 +2215,10 @@ class RtlCalibrationDialog(tk.Toplevel):
     def capture_level(self, level_dbm: int) -> None:
         power = self.app.power_panel.latest_power_dbfs
         if power is None:
-            self.status_var.set("Start RTL power and wait for a reading before capture.")
+            self.status_var.set("Start B210 power and wait for a reading before capture.")
             return
         if self.app.power_panel.is_warming():
-            self.status_var.set("RTL power meter is still warming; wait for Ready before capture.")
+            self.status_var.set("B210 power meter is still warming; wait for Ready before capture.")
             return
         self.level_vars[level_dbm].set(f"{power:0.2f}")
         self.status_var.set(f"Captured {level_dbm:d} dBm as {power:0.2f} dBFS.")
@@ -2262,7 +2286,7 @@ class ScanCalibrationDialog(tk.Toplevel):
         self.resizable(False, False)
         self.transient(app)
         self.grab_set()
-        self.status_var = tk.StringVar(value="Track a source and start RTL power before scanning.")
+        self.status_var = tk.StringVar(value="Track a source and start B210 power before scanning.")
         antenna_names = list(app.configs) or list(app.panels)
         default_antenna = app.scan_config.antenna_name if app.scan_config.antenna_name in antenna_names else ""
         if not default_antenna and antenna_names:
@@ -2608,7 +2632,7 @@ class YFactorDialog(tk.Toplevel):
         self.cold_dec_var = tk.StringVar(value=f"{config.cold_dec:0.1f}")
         self.count_var = tk.StringVar(value=str(config.count))
         self.dwell_var = tk.StringVar(value=f"{config.dwell_seconds:0.1f}")
-        self.status_var = tk.StringVar(value="Start RTL power before measuring.")
+        self.status_var = tk.StringVar(value="Start B210 power before measuring.")
 
         body = ttk.Frame(self, padding=10)
         body.grid(row=0, column=0, sticky="nsew")
@@ -3225,7 +3249,7 @@ class WT6App(tk.Tk):
             dialog.set_status("Connect antennas before scanning.")
             return
         if self.power_panel.latest_power_dbfs is None:
-            dialog.set_status("Start RTL power and wait for readings before scanning.")
+            dialog.set_status("Start B210 power and wait for readings before scanning.")
             return
         try:
             self.validate_scan_config(config)
@@ -3471,7 +3495,7 @@ class WT6App(tk.Tk):
             dialog.set_status("Connect and select an antenna before Y Factor measurement.")
             return
         if self.power_panel.current_power_measurement() is None:
-            dialog.set_status("Start RTL power and wait for readings before Y Factor measurement.")
+            dialog.set_status("Start B210 power and wait for readings before Y Factor measurement.")
             return
         if not (1 <= count <= 50):
             dialog.set_status("Measurements must be 1..50.")
@@ -3812,7 +3836,7 @@ class WT6App(tk.Tk):
                 next_position_update = time.monotonic() + 0.5
             time.sleep(0.1)
         if not measurements:
-            raise RuntimeError("No RTL power measurements were available.")
+            raise RuntimeError("No B210 power measurements were available.")
         return {
             "power_value": sum(float(row["power_value"]) for row in measurements) / len(measurements),
             "power_dbfs": sum(float(row["power_dbfs"]) for row in measurements) / len(measurements),

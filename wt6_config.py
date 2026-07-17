@@ -44,12 +44,16 @@ class SiteConfig:
 class PowerConfig:
     center_frequency_hz: int = 1_200_000_000
     sample_rate_hz: int = 1_024_000
+    measurement_bandwidth_hz: int = 512_000
     gain_db: str = "29.7"
+    gain_b_db: str = "29.7"
     frequency_correction_ppm: int = 0
     samples_per_read: str = "auto"
     update_rate_hz: float = 10.0
     smoothing_samples: int = 3
     warmup_seconds: float = 30.0
+    clock_source: str = "internal"
+    b210_device_args: str = "num_recv_frames=256"
 
 
 @dataclass
@@ -286,15 +290,25 @@ def load_power_config(path: Union[str, Path]) -> PowerConfig:
     parser = configparser.ConfigParser()
     if path.exists():
         _read_parser(parser, path)
+    sample_rate_hz = parser.getint("power", "sample_rate_hz", fallback=1_024_000)
     return PowerConfig(
         center_frequency_hz=parser.getint("power", "center_frequency_hz", fallback=1_200_000_000),
-        sample_rate_hz=parser.getint("power", "sample_rate_hz", fallback=1_024_000),
+        sample_rate_hz=sample_rate_hz,
+        measurement_bandwidth_hz=parser.getint(
+            "power", "measurement_bandwidth_hz", fallback=max(1, sample_rate_hz // 2)
+        ),
         gain_db=parser.get("power", "gain_db", fallback="29.7").strip() or "auto",
+        gain_b_db=parser.get(
+            "power", "gain_b_db", fallback=parser.get("power", "gain_db", fallback="29.7")
+        ).strip()
+        or "auto",
         frequency_correction_ppm=parser.getint("power", "frequency_correction_ppm", fallback=0),
         samples_per_read=parser.get("power", "samples_per_read", fallback="auto").strip() or "auto",
         update_rate_hz=parser.getfloat("power", "update_rate_hz", fallback=10.0),
         smoothing_samples=parser.getint("power", "smoothing_samples", fallback=3),
         warmup_seconds=parser.getfloat("power", "warmup_seconds", fallback=30.0),
+        clock_source=parser.get("power", "clock_source", fallback="internal").strip() or "internal",
+        b210_device_args=parser.get("power", "b210_device_args", fallback="num_recv_frames=256").strip(),
     )
 
 
@@ -306,12 +320,16 @@ def save_power_config(path: Union[str, Path], power: PowerConfig) -> None:
     parser["power"] = {
         "center_frequency_hz": str(int(power.center_frequency_hz)),
         "sample_rate_hz": str(int(power.sample_rate_hz)),
+        "measurement_bandwidth_hz": str(int(power.measurement_bandwidth_hz)),
         "gain_db": power.gain_db,
+        "gain_b_db": power.gain_b_db,
         "frequency_correction_ppm": str(int(power.frequency_correction_ppm)),
         "samples_per_read": power.samples_per_read,
         "update_rate_hz": f"{power.update_rate_hz:.1f}",
         "smoothing_samples": str(max(1, int(power.smoothing_samples))),
         "warmup_seconds": f"{power.warmup_seconds:.1f}",
+        "clock_source": power.clock_source,
+        "b210_device_args": power.b210_device_args,
     }
     with path.open("w", encoding="utf-8") as handle:
         parser.write(handle)

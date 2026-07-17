@@ -20,14 +20,18 @@ timeout_action = disconnect
 [power]
 center_frequency_hz = 1200000000
 sample_rate_hz = 1024000
-gain_db = 29.7
+measurement_bandwidth_hz = 512000
+gain_db = 48
+gain_b_db = 48
 frequency_correction_ppm = 0
 samples_per_read = auto
 update_rate_hz = 10.0
 smoothing_samples = 3
 warmup_seconds = 30.0
+clock_source = internal
+b210_device_args = num_recv_frames=256
 
-# Created/updated by RTL Cal. Each section is frequency/sample-rate/gain specific.
+# Legacy RTL calibration sections are ignored by the B210 power backend.
 # [rtl_cal:1200000000:1024000:29p7]
 # frequency_hz = 1200000000
 # sample_rate_hz = 1024000

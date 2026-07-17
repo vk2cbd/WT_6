@@ -1,7 +1,7 @@
-# WT6
+﻿# WT6
 
 Ubuntu alpha port of the two-antenna radio astronomy controller, now renamed and packaged as WT6. The code is intended to run on an Ubuntu desktop or small-form-factor PC
-with two Arduino antenna controllers and an optional RTL-SDR power meter.
+with two Arduino antenna controllers and an optional Ettus B210 dual-channel power meter.
 
 ## Status
 
@@ -13,7 +13,7 @@ Install system packages:
 
 ```bash
 sudo apt update
-sudo apt install -y python3 python3-pip python3-tk rtl-sdr librtlsdr0
+sudo apt install -y python3 python3-pip python3-tk python3-numpy uhd-host soapysdr-tools soapysdr-module-uhd python3-soapysdr
 ```
 
 Allow the user to access serial and USB devices:
@@ -24,15 +24,11 @@ sudo usermod -aG dialout,plugdev $USER
 
 Log out and back in after changing groups.
 
-If Ubuntu claims the RTL-SDR as a TV receiver, create this file:
+Verify the B210 is visible before starting WT6 power measurement:
 
 ```bash
-sudo tee /etc/modprobe.d/blacklist-rtl.conf >/dev/null <<'EOF'
-blacklist dvb_usb_rtl28xxu
-blacklist rtl2832
-blacklist rtl2830
-EOF
-sudo reboot
+uhd_find_devices
+SoapySDRUtil --find=driver=uhd
 ```
 
 Install Python dependencies:
@@ -66,7 +62,7 @@ An existing earlier WT `.ini` can usually be copied to `wt6_ubuntu.ini`; then ch
 - observer location
 - antenna limits and park positions
 - tracking speeds, tolerances, and hysteresis compensation
-- RTL-SDR frequency, gain, sample rate, and calibration records
+- B210 frequency, sample rate, bandwidth, clock source, and channel gains
 
 ## Safety Rules
 
@@ -84,14 +80,14 @@ An existing earlier WT `.ini` can usually be copied to `wt6_ubuntu.ini`; then ch
 - `logs/` - compact JSON-lines event logs with retention control
 - `scan/` - scan calibration CSV files
 - `yfactor/` - Y factor measurement CSV files
-- `power/` - RTL power meter logs when logging is enabled
+- `power/` - B210 power meter logs when logging is enabled
 
 ## Main Files
 
 - `wt6_ubuntu_gui.py` - Tkinter operator interface and orchestration
 - `wt6_antenna.py` - Arduino protocol, controller session, and guarded motion
 - `wt6_config.py` - `.ini` loading/saving
-- `wt6_power.py` - RTL-SDR power meter primitives
+- `wt6_b210_power.py` - B210 dual-channel power meter primitives
 - `wt6_astro.py` / `wt6_solar.py` - source, Sun, and Moon position calculations
 - `wt6_logging.py` - JSON-lines event log
 
