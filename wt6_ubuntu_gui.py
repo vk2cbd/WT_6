@@ -50,6 +50,19 @@ from wt6_state import AppStateStore, AntennaRunState, PowerRunState, SystemRunSt
 
 APP_VERSION = "v0.2-alpha"
 
+WT6_BG = "#f3f4f2"
+WT6_CARD = "#ffffff"
+WT6_BORDER = "#d7d9d5"
+WT6_TEXT = "#1f2428"
+WT6_MUTED = "#7d8589"
+WT6_ACCENT = "#e7d5c6"
+WT6_TRACKING = "#e7d5c6"
+WT6_SLEWING = "#d8e8fb"
+WT6_SAFE = "#e7d5c6"
+WT6_FAULT = "#ffd4d4"
+WT6_STOPPED = "#eeeeec"
+WT6_RELEASED = "#eeeeec"
+
 
 def axis_label(axis: Axis) -> str:
     return "AZ" if axis == Axis.AZIMUTH else "EL"
@@ -1397,7 +1410,7 @@ class TrackingDialog(tk.Toplevel):
 
 class AntennaPanel(ttk.Frame):
     def __init__(self, master: tk.Misc, app: "WT6App", name: str, config: Optional[AntennaConfig] = None) -> None:
-        super().__init__(master, padding=8, relief="solid", borderwidth=1)
+        super().__init__(master, padding=10, relief="solid", borderwidth=1, style="Card.TFrame")
         self.app = app
         self.name = name
         self.config = config
@@ -1424,13 +1437,15 @@ class AntennaPanel(ttk.Frame):
         self.manual_jog_active = False
 
         self.columnconfigure(0, weight=1)
-        header = ttk.Frame(self)
+        header = ttk.Frame(self, style="Card.TFrame")
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
-        ttk.Label(header, text=name.upper(), font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="w")
-        ttk.Label(header, textvariable=self.status_var).grid(row=0, column=1, sticky="e")
+        ttk.Label(header, text=name.upper(), style="SectionTitle.TLabel").grid(row=0, column=0, sticky="w")
+        self.status_label = tk.Label(header, textvariable=self.status_var, padx=10, pady=4, bd=0)
+        self.status_label.grid(row=0, column=1, sticky="e")
+        self.status_var.trace_add("write", lambda *_args: self.refresh_status_badge())
 
-        content = ttk.Frame(self)
+        content = ttk.Frame(self, style="Card.TFrame")
         content.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         content.columnconfigure(0, weight=0)
         content.columnconfigure(1, weight=1)
@@ -1438,24 +1453,26 @@ class AntennaPanel(ttk.Frame):
         content.columnconfigure(3, weight=0)
         content.columnconfigure(4, weight=0)
 
-        ttk.Label(content, text="AZ").grid(row=0, column=0, sticky="w", padx=(0, 6))
-        ttk.Label(content, textvariable=self.cal_az_var, font=("TkDefaultFont", 17, "bold")).grid(row=0, column=1, sticky="w", padx=(0, 12))
-        ttk.Label(content, text="AZ err").grid(row=0, column=2, sticky="w")
+        ttk.Label(content, text="AZ", style="Muted.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        ttk.Label(content, textvariable=self.cal_az_var, style="AntennaValue.TLabel").grid(row=0, column=1, sticky="w", padx=(0, 12))
+        ttk.Label(content, text="AZ err", style="Muted.TLabel").grid(row=0, column=2, sticky="w")
         ttk.Label(content, textvariable=self.az_error_var).grid(row=0, column=2, sticky="w", padx=(52, 0))
-        ttk.Label(content, text="Limits").grid(row=0, column=3, sticky="w", padx=(14, 4))
-        ttk.Label(content, textvariable=self.limits_var).grid(row=0, column=3, sticky="w", padx=(62, 0))
+        ttk.Label(content, text="Limits", style="Muted.TLabel").grid(row=0, column=3, sticky="w", padx=(14, 4))
+        self.limits_label = tk.Label(content, textvariable=self.limits_var, padx=10, pady=3, bd=0)
+        self.limits_label.grid(row=0, column=3, sticky="w", padx=(62, 0))
+        self.limits_var.trace_add("write", lambda *_args: self.refresh_limits_badge())
 
-        ttk.Label(content, text="EL").grid(row=1, column=0, sticky="w", padx=(0, 6))
-        ttk.Label(content, textvariable=self.cal_el_var, font=("TkDefaultFont", 17, "bold")).grid(row=1, column=1, sticky="w", padx=(0, 12))
-        ttk.Label(content, text="EL err").grid(row=1, column=2, sticky="w")
+        ttk.Label(content, text="EL", style="Muted.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 6))
+        ttk.Label(content, textvariable=self.cal_el_var, style="AntennaValue.TLabel").grid(row=1, column=1, sticky="w", padx=(0, 12))
+        ttk.Label(content, text="EL err", style="Muted.TLabel").grid(row=1, column=2, sticky="w")
         ttk.Label(content, textvariable=self.el_error_var).grid(row=1, column=2, sticky="w", padx=(52, 0))
-        ttk.Label(content, text="Mode").grid(row=1, column=3, sticky="w", padx=(14, 4))
+        ttk.Label(content, text="Mode", style="Muted.TLabel").grid(row=1, column=3, sticky="w", padx=(14, 4))
         ttk.Label(content, textvariable=self.mode_var).grid(row=1, column=3, sticky="w", padx=(62, 0))
 
-        ttk.Label(content, text="Target").grid(row=2, column=2, sticky="w")
+        ttk.Label(content, text="Target", style="Muted.TLabel").grid(row=2, column=2, sticky="w")
         ttk.Label(content, textvariable=self.target_var).grid(row=2, column=2, columnspan=2, sticky="w", padx=(52, 0))
 
-        manual = ttk.Frame(content)
+        manual = ttk.Frame(content, style="Card.TFrame")
         manual.grid(row=0, column=4, rowspan=3, sticky="e", padx=(14, 0))
         for col in range(3):
             manual.columnconfigure(col, minsize=64)
@@ -1463,14 +1480,32 @@ class AntennaPanel(ttk.Frame):
             manual.rowconfigure(row, minsize=30)
         self._hold_button(manual, "EL+", Direction.EL_UP).grid(row=0, column=1, sticky="ew", padx=2, pady=2)
         self._hold_button(manual, "AZ-", Direction.AZ_CCW).grid(row=1, column=0, sticky="ew", padx=2, pady=2)
-        ttk.Button(manual, text="STOP", command=self.stop).grid(row=1, column=1, sticky="ew", padx=2, pady=2)
+        ttk.Button(manual, text="STOP", command=self.stop, style="Pad.TButton").grid(row=1, column=1, sticky="ew", padx=2, pady=2)
         self._hold_button(manual, "AZ+", Direction.AZ_CW).grid(row=1, column=2, sticky="ew", padx=2, pady=2)
         self._hold_button(manual, "EL-", Direction.EL_DOWN).grid(row=2, column=1, sticky="ew", padx=2, pady=2)
 
         self.reference_frame: Optional[ttk.Frame] = None
-        ttk.Label(self, textvariable=self.fault_var, foreground="red", wraplength=360).grid(
+        ttk.Label(self, textvariable=self.fault_var, style="Fault.TLabel", wraplength=360).grid(
             row=2, column=0, sticky="ew", pady=(6, 0)
         )
+        self.refresh_status_badge()
+        self.refresh_limits_badge()
+
+    def refresh_status_badge(self) -> None:
+        text = self.status_var.get().upper()
+        bg = WT6_STOPPED
+        if "FAULT" in text or "OFFLINE" in text or "DISCONNECT" in text:
+            bg = WT6_FAULT if "FAULT" in text or "OFFLINE" in text else WT6_STOPPED
+        elif "SLEW" in text or "PARK" in text or "CONNECT" in text:
+            bg = WT6_SLEWING
+        elif "TRACK" in text or "YFACTOR" in text or "SCAN" in text:
+            bg = WT6_TRACKING
+        self.status_label.configure(bg=bg, fg=WT6_TEXT)
+
+    def refresh_limits_badge(self) -> None:
+        text = self.limits_var.get().upper()
+        bg = WT6_FAULT if "FAULT" in text or "LIMIT" in text else WT6_SAFE
+        self.limits_label.configure(bg=bg, fg=WT6_TEXT)
 
     def add_reference_block(
         self,
@@ -1489,7 +1524,7 @@ class AntennaPanel(ttk.Frame):
         ttk.Label(self.reference_frame, textvariable=utc_var).grid(row=5, column=0, sticky="w", pady=(2, 0))
 
     def _hold_button(self, master: tk.Misc, text: str, direction: Direction) -> ttk.Button:
-        button = ttk.Button(master, text=text, width=6)
+        button = ttk.Button(master, text=text, width=7, style="Pad.TButton")
         button.bind("<ButtonPress-1>", lambda _event: self.start_jog(direction))
         button.bind("<ButtonRelease-1>", lambda _event: self.stop_jog())
         button.bind("<Leave>", lambda _event: self.stop_jog())
@@ -1679,7 +1714,7 @@ class AntennaPanel(ttk.Frame):
 
 class PowerMeterPanel(ttk.LabelFrame):
     def __init__(self, master: tk.Misc, app: "WT6App") -> None:
-        super().__init__(master, text="B210", padding=8)
+        super().__init__(master, text="B210", padding=10, style="Power.TLabelframe")
         self.app = app
         self.stop_event = threading.Event()
         self.thread: Optional[threading.Thread] = None
@@ -1720,17 +1755,17 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.owner_var = tk.StringVar(value="SDR released for other apps")
 
         self.columnconfigure(1, weight=1)
-        ttk.Label(self, text="B210", font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="nw", padx=(0, 12))
-        ttk.Label(self, textvariable=self.status_var).grid(row=1, column=0, sticky="nw", padx=(0, 12))
+        ttk.Label(self, text="B210", style="SectionTitle.TLabel").grid(row=0, column=0, sticky="nw", padx=(0, 12))
+        ttk.Label(self, textvariable=self.status_var, style="Card.TLabel").grid(row=1, column=0, sticky="nw", padx=(0, 12))
 
-        channels = ttk.Frame(self)
+        channels = ttk.Frame(self, style="Card.TFrame")
         channels.grid(row=0, column=1, sticky="ew")
         channels.columnconfigure(0, weight=1)
         channels.columnconfigure(1, weight=1)
         self._channel_panel(channels, 0, "CH A", self.power_var, self.gain_var, self.stats_var)
         self._channel_panel(channels, 1, "CH B", self.power_b_var, self.gain_b_var, self.stats_b_var)
 
-        fields = ttk.Frame(self)
+        fields = ttk.Frame(self, style="Card.TFrame")
         fields.grid(row=1, column=1, sticky="ew", pady=(6, 0))
         self._entry(fields, "Freq MHz", self.freq_var, 0, width=7)
         self._entry(fields, "Rate ksps", self.rate_var, 2, width=6)
@@ -1741,9 +1776,9 @@ class PowerMeterPanel(ttk.LabelFrame):
         ttk.Button(fields, text="SDR Power On", command=self.start).grid(row=0, column=12, sticky="w", padx=(6, 0))
         ttk.Button(fields, text="Release SDR", command=self.stop).grid(row=0, column=13, sticky="w", padx=(6, 0))
         ttk.Button(fields, text="Cal", command=self.show_b210_calibration_pending).grid(row=0, column=14, sticky="w", padx=(6, 0))
-        ttk.Label(fields, textvariable=self.owner_var).grid(row=0, column=15, sticky="w", padx=(10, 0))
+        ttk.Label(fields, textvariable=self.owner_var, style="Muted.TLabel").grid(row=0, column=15, sticky="w", padx=(10, 0))
 
-        log_controls = ttk.Frame(self)
+        log_controls = ttk.Frame(self, style="Card.TFrame")
         log_controls.grid(row=2, column=1, sticky="w", pady=(6, 0))
         ttk.Button(log_controls, text="Start Log", command=self.start_log).pack(side="left")
         ttk.Button(log_controls, text="Stop Log", command=self.stop_log).pack(side="left", padx=(6, 0))
@@ -1757,16 +1792,16 @@ class PowerMeterPanel(ttk.LabelFrame):
         gain_var: tk.StringVar,
         stats_var: tk.StringVar,
     ) -> None:
-        frame = ttk.Frame(parent)
+        frame = ttk.Frame(parent, style="Card.TFrame")
         frame.grid(row=0, column=column, sticky="ew", padx=(0, 18 if column == 0 else 0))
-        ttk.Label(frame, text=title, font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="w")
-        ttk.Label(frame, textvariable=power_var, font=("TkDefaultFont", 13, "bold")).grid(row=0, column=1, sticky="w", padx=(10, 0))
-        ttk.Label(frame, text="Gain").grid(row=1, column=0, sticky="w", pady=(2, 0))
+        ttk.Label(frame, text=title, style="SectionTitle.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(frame, textvariable=power_var, style="SourceValue.TLabel").grid(row=0, column=1, sticky="w", padx=(10, 0))
+        ttk.Label(frame, text="Gain", style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(2, 0))
         ttk.Entry(frame, textvariable=gain_var, width=6).grid(row=1, column=1, sticky="w", padx=(10, 0), pady=(2, 0))
-        ttk.Label(frame, textvariable=stats_var).grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        ttk.Label(frame, textvariable=stats_var, style="Card.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
     def _entry(self, parent: tk.Misc, label: str, variable: tk.StringVar, column: int, width: int) -> None:
-        ttk.Label(parent, text=label).grid(row=0, column=column, sticky="w", padx=(0, 2))
+        ttk.Label(parent, text=label, style="Card.TLabel").grid(row=0, column=column, sticky="w", padx=(0, 2))
         ttk.Entry(parent, textvariable=variable, width=width).grid(row=0, column=column + 1, sticky="w", padx=(0, 8))
 
     def show_b210_calibration_pending(self) -> None:
@@ -2769,12 +2804,13 @@ class WT6App(tk.Tk):
 
         self.status_var = tk.StringVar(value="Load config, connect antennas, then use guarded jogs.")
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.configure_theme()
 
-        top = ttk.Frame(self, padding=(8, 8, 8, 2))
+        top = ttk.Frame(self, padding=(10, 8, 10, 2), style="Toolbar.TFrame")
         top.pack(fill="x")
-        top_row_1 = ttk.Frame(top)
+        top_row_1 = ttk.Frame(top, style="Toolbar.TFrame")
         top_row_1.pack(fill="x")
-        top_row_2 = ttk.Frame(top)
+        top_row_2 = ttk.Frame(top, style="Toolbar.TFrame")
         top_row_2.pack(fill="x", pady=(4, 0))
         ttk.Button(top_row_1, text="Connect", command=self.connect_all).pack(side="left")
         ttk.Button(top_row_1, text="Disconnect", command=self.disconnect_all).pack(side="left", padx=(6, 0))
@@ -2787,44 +2823,44 @@ class WT6App(tk.Tk):
         ttk.Button(top_row_1, text="Scan Cal", command=self.open_scan_calibration).pack(side="left", padx=(6, 0))
         ttk.Button(top_row_1, text="Y Factor", command=self.open_yfactor).pack(side="left", padx=(6, 0))
         ttk.Button(top_row_1, text="Encoders", command=self.open_encoders).pack(side="left", padx=(6, 0))
-        ttk.Button(top_row_1, text="STOP ALL", command=self.stop_all).pack(side="left", padx=(6, 0))
+        ttk.Button(top_row_1, text="STOP ALL", command=self.stop_all, style="Danger.TButton").pack(side="left", padx=(6, 0))
         ttk.Button(top_row_2, text="Track Sun", command=lambda: self.start_tracking("sun")).pack(side="left")
         ttk.Button(top_row_2, text="Track Moon", command=lambda: self.start_tracking("moon")).pack(side="left", padx=(6, 0))
         ttk.Button(top_row_2, text="Track Source", command=lambda: self.start_tracking("source")).pack(side="left", padx=(6, 0))
         ttk.Button(top_row_2, text="Stop Track", command=self.stop_sun_tracking).pack(side="left", padx=(6, 0))
         ttk.Button(top_row_2, text="Park", command=self.park_all).pack(side="left", padx=(6, 0))
 
-        summary = ttk.Frame(self, padding=(8, 2, 8, 2))
+        summary = ttk.Frame(self, padding=(10, 4, 10, 4), style="Toolbar.TFrame")
         summary.pack(fill="x")
         summary.columnconfigure(0, weight=1)
         summary.columnconfigure(1, weight=2)
 
-        source_panel = ttk.Frame(summary, relief="solid", borderwidth=1, padding=8)
+        source_panel = ttk.Frame(summary, relief="solid", borderwidth=1, padding=10, style="Card.TFrame")
         source_panel.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        ttk.Label(source_panel, text="SOURCE", font=("TkDefaultFont", 10, "bold")).pack(side="left")
-        ttk.Label(source_panel, textvariable=self.target_name_var).pack(side="left", padx=(8, 0))
-        ttk.Label(source_panel, textvariable=self.target_az_var, font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=(18, 0))
-        ttk.Label(source_panel, textvariable=self.target_el_var, font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=(18, 0))
-        ttk.Label(source_panel, textvariable=self.target_ha_var, font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=(18, 0))
+        ttk.Label(source_panel, text="SOURCE", style="SourceTitle.TLabel").pack(side="left")
+        ttk.Label(source_panel, textvariable=self.target_name_var, style="Card.TLabel").pack(side="left", padx=(8, 0))
+        ttk.Label(source_panel, textvariable=self.target_az_var, style="SourceValue.TLabel").pack(side="left", padx=(18, 0))
+        ttk.Label(source_panel, textvariable=self.target_el_var, style="SourceValue.TLabel").pack(side="left", padx=(18, 0))
+        ttk.Label(source_panel, textvariable=self.target_ha_var, style="SourceValue.TLabel").pack(side="left", padx=(18, 0))
 
-        reference_panel = ttk.Frame(summary, relief="solid", borderwidth=1, padding=8)
+        reference_panel = ttk.Frame(summary, relief="solid", borderwidth=1, padding=10, style="Card.TFrame")
         reference_panel.grid(row=0, column=1, sticky="ew", padx=(4, 0))
-        reference_top = ttk.Frame(reference_panel)
+        reference_top = ttk.Frame(reference_panel, style="Card.TFrame")
         reference_top.pack(fill="x")
-        ttk.Label(reference_top, textvariable=self.lmst_var).pack(side="left")
-        ttk.Label(reference_top, textvariable=self.utc_var).pack(side="left", padx=(18, 0))
-        ttk.Label(reference_top, textvariable=self.local_time_var).pack(side="left", padx=(18, 0))
-        reference_bottom = ttk.Frame(reference_panel)
+        ttk.Label(reference_top, textvariable=self.lmst_var, style="Card.TLabel").pack(side="left")
+        ttk.Label(reference_top, textvariable=self.utc_var, style="Card.TLabel").pack(side="left", padx=(18, 0))
+        ttk.Label(reference_top, textvariable=self.local_time_var, style="Card.TLabel").pack(side="left", padx=(18, 0))
+        reference_bottom = ttk.Frame(reference_panel, style="Card.TFrame")
         reference_bottom.pack(fill="x", pady=(6, 0))
-        ttk.Label(reference_bottom, textvariable=self.sun_ref_var, font=("TkDefaultFont", 10, "bold")).pack(side="left")
-        ttk.Label(reference_bottom, textvariable=self.moon_ref_var, font=("TkDefaultFont", 10, "bold")).pack(side="left", padx=(24, 0))
+        ttk.Label(reference_bottom, textvariable=self.sun_ref_var, style="SourceTitle.TLabel").pack(side="left")
+        ttk.Label(reference_bottom, textvariable=self.moon_ref_var, style="SourceTitle.TLabel").pack(side="left", padx=(24, 0))
 
-        timeout_bar = ttk.Frame(self, padding=(8, 0, 8, 2))
+        timeout_bar = ttk.Frame(self, padding=(10, 0, 10, 2), style="Toolbar.TFrame")
         timeout_bar.pack(fill="x")
         ttk.Label(timeout_bar, textvariable=self.timeout_var).pack(side="left")
         ttk.Label(timeout_bar, textvariable=self.status_var, foreground="red").pack(side="left", padx=(18, 0))
 
-        body = ttk.Frame(self, padding=8)
+        body = ttk.Frame(self, padding=10, style="Toolbar.TFrame")
         body.pack(fill="both", expand=True)
         body.columnconfigure(0, weight=1)
         body.columnconfigure(1, weight=1)
@@ -2849,6 +2885,35 @@ class WT6App(tk.Tk):
         self.after(100, self.process_events)
         self.update_reference_positions()
         self.after(1500, self.periodic_refresh)
+
+    def configure_theme(self) -> None:
+        self.configure(bg=WT6_BG)
+        style = ttk.Style(self)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+        default_font = ("Segoe UI", 10)
+        style.configure(".", font=default_font, background=WT6_BG, foreground=WT6_TEXT)
+        style.configure("TFrame", background=WT6_BG)
+        style.configure("Toolbar.TFrame", background=WT6_BG)
+        style.configure("Card.TFrame", background=WT6_CARD, relief="solid", borderwidth=1)
+        style.configure("TLabel", background=WT6_BG, foreground=WT6_TEXT)
+        style.configure("SectionTitle.TLabel", background=WT6_CARD, foreground=WT6_TEXT, font=("Segoe UI", 10, "bold"))
+        style.configure("SourceTitle.TLabel", background=WT6_CARD, foreground=WT6_TEXT, font=("Segoe UI", 10, "bold"))
+        style.configure("SourceValue.TLabel", background=WT6_CARD, foreground=WT6_TEXT, font=("Segoe UI", 12, "bold"))
+        style.configure("Card.TLabel", background=WT6_CARD, foreground=WT6_TEXT)
+        style.configure("Muted.TLabel", background=WT6_CARD, foreground=WT6_MUTED)
+        style.configure("AntennaValue.TLabel", background=WT6_CARD, foreground=WT6_TEXT, font=("Segoe UI", 18, "bold"))
+        style.configure("Fault.TLabel", background=WT6_CARD, foreground="#d00000")
+        style.configure("Power.TLabelframe", background=WT6_CARD, bordercolor=WT6_BORDER, relief="solid")
+        style.configure("Power.TLabelframe.Label", background=WT6_CARD, foreground=WT6_TEXT, font=("Segoe UI", 10, "bold"))
+        style.configure("TEntry", fieldbackground="#ffffff", bordercolor=WT6_BORDER, lightcolor=WT6_BORDER, darkcolor=WT6_BORDER)
+        style.configure("TButton", padding=(10, 5), background="#f8f8f7", foreground=WT6_TEXT, bordercolor=WT6_BORDER)
+        style.map("TButton", background=[("active", "#ffffff"), ("pressed", "#e9ece9")])
+        style.configure("Pad.TButton", padding=(8, 5), background="#ffffff")
+        style.configure("Danger.TButton", padding=(10, 5), background="#ffe2e2", foreground="#700000")
+        style.map("Danger.TButton", background=[("active", "#ffd4d4"), ("pressed", "#ffc0c0")])
 
     def note_user_activity(self, _event=None) -> None:
         self.last_user_activity = time.monotonic()
@@ -4828,6 +4893,11 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
+
+
 
 
 
