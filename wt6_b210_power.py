@@ -82,7 +82,7 @@ class B210PowerMeter:
         try:
             import numpy as np  # type: ignore
             import SoapySDR  # type: ignore
-            from SoapySDR import SOAPY_SDR_CF32, SOAPY_SDR_RX  # type: ignore
+            from SoapySDR import SOAPY_SDR_CF32, SOAPY_SDR_HAS_TIME, SOAPY_SDR_RX  # type: ignore
         except ImportError as exc:
             raise RuntimeError(
                 "SoapySDR/numpy is not installed. Install UHD and SoapySDR Python bindings for B210 power."
@@ -130,7 +130,7 @@ class B210PowerMeter:
                 "create two-channel RX stream",
                 lambda: sdr.setupStream(SOAPY_SDR_RX, SOAPY_SDR_CF32, [0, 1]),
             )
-            run_b210_step("activate two-channel RX stream", lambda: sdr.activateStream(rx_stream))
+            activate_b210_stream_with_timed_start(sdr, rx_stream, SOAPY_SDR_HAS_TIME)
         except Exception:
             if sdr is not None and rx_stream is not None:
                 try:
@@ -217,6 +217,18 @@ def normalize_clock_source(clock_source: str) -> str:
     if text in ("ext", "external"):
         return "external"
     return text
+
+
+def activate_b210_stream_with_timed_start(sdr, rx_stream, has_time_flag: int) -> None:
+    # UHD requires a timed command for a multi-channel B210 stream so both RX
+    # channels align instead of starting independently.
+    run_b210_step("reset B210 hardware time", lambda: sdr.setHardwareTime(0))
+    start_time_ns = run_b210_step("read B210 hardware time", lambda: sdr.getHardwareTime())
+    start_time_ns += 100_000_000
+    run_b210_step(
+        "activate time-aligned two-channel RX stream",
+        lambda: sdr.activateStream(rx_stream, flags=has_time_flag, timeNs=start_time_ns),
+    )
 
 
 def run_b210_step(step_name: str, action):
