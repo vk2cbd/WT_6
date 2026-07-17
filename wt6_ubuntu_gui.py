@@ -1738,18 +1738,14 @@ class PowerMeterPanel(ttk.LabelFrame):
         self._entry(fields, "Freq MHz", self.freq_var, 0, width=7)
         self._entry(fields, "Rate ksps", self.rate_var, 2, width=6)
         self._entry(fields, "BW kHz", self.bandwidth_var, 4, width=6)
-        self._entry(fields, "Clock", self.clock_var, 6, width=5)
+        self._entry(fields, "Clock", self.clock_var, 6, width=8)
         self._entry(fields, "Avg", self.smooth_var, 8, width=4)
         self._entry(fields, "GUI Hz", self.update_var, 10, width=5)
         ttk.Button(fields, text="SDR Power On", command=self.start).grid(row=0, column=12, sticky="w", padx=(6, 0))
         ttk.Button(fields, text="Release SDR", command=self.stop).grid(row=0, column=13, sticky="w", padx=(6, 0))
         ttk.Button(fields, text="Cal", command=self.show_b210_calibration_pending).grid(row=0, column=14, sticky="w", padx=(6, 0))
-        ttk.Label(fields, textvariable=self.owner_var).grid(row=0, column=15, sticky="w", padx=(10, 0))
-
-        log_controls = ttk.Frame(self)
-        log_controls.grid(row=2, column=1, sticky="w", pady=(6, 0))
-        ttk.Button(log_controls, text="Start Log", command=self.start_log).pack(side="left")
-        ttk.Button(log_controls, text="Stop Log", command=self.stop_log).pack(side="left", padx=(6, 0))
+        ttk.Button(fields, text="Start Log", command=self.start_log).grid(row=0, column=15, sticky="w", padx=(12, 0))
+        ttk.Button(fields, text="Stop Log", command=self.stop_log).grid(row=0, column=16, sticky="w", padx=(6, 0))
 
     def _channel_panel(
         self,
