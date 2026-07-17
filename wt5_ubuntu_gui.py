@@ -1397,7 +1397,7 @@ class TrackingDialog(tk.Toplevel):
 
 class AntennaPanel(ttk.Frame):
     def __init__(self, master: tk.Misc, app: "WT5UbuntuAlphaApp", name: str, config: Optional[AntennaConfig] = None) -> None:
-        super().__init__(master, padding=8)
+        super().__init__(master, padding=8, relief="solid", borderwidth=1)
         self.app = app
         self.name = name
         self.config = config
@@ -1407,6 +1407,11 @@ class AntennaPanel(ttk.Frame):
         self.status_var = tk.StringVar(value="DISCONNECTED")
         self.cal_az_var = tk.StringVar(value="--")
         self.cal_el_var = tk.StringVar(value="--")
+        self.az_error_var = tk.StringVar(value="--")
+        self.el_error_var = tk.StringVar(value="--")
+        self.target_var = tk.StringVar(value="--")
+        self.mode_var = tk.StringVar(value="--")
+        self.limits_var = tk.StringVar(value="SAFE")
         self.fault_var = tk.StringVar(value="")
 
         initial_speed = config.gui_speed if config else 40
@@ -1418,36 +1423,53 @@ class AntennaPanel(ttk.Frame):
         self.jog_thread_active = False
         self.manual_jog_active = False
 
-        self.columnconfigure(1, weight=1)
-        ttk.Label(self, text=name.upper(), font=("TkDefaultFont", 13, "bold")).grid(row=0, column=0, sticky="w")
-        ttk.Label(self, textvariable=self.status_var).grid(row=0, column=1, sticky="e")
+        self.columnconfigure(0, weight=1)
+        header = ttk.Frame(self)
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(0, weight=1)
+        ttk.Label(header, text=name.upper(), font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(header, textvariable=self.status_var).grid(row=0, column=1, sticky="e")
 
-        position_frame = ttk.Frame(self)
-        position_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(2, 0))
-        for col in range(2):
-            position_frame.columnconfigure(col, weight=1)
-        self._position_cell(position_frame, 0, 0, "AZ", self.cal_az_var)
-        self._position_cell(position_frame, 1, 0, "EL", self.cal_el_var)
+        content = ttk.Frame(self)
+        content.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        content.columnconfigure(0, weight=0)
+        content.columnconfigure(1, weight=1)
+        content.columnconfigure(2, weight=1)
+        content.columnconfigure(3, weight=0)
+        content.columnconfigure(4, weight=0)
 
-        control = ttk.LabelFrame(self, text="Manual")
-        control.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        ttk.Label(content, text="AZ").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        ttk.Label(content, textvariable=self.cal_az_var, font=("TkDefaultFont", 17, "bold")).grid(row=0, column=1, sticky="w", padx=(0, 12))
+        ttk.Label(content, text="AZ err").grid(row=0, column=2, sticky="w")
+        ttk.Label(content, textvariable=self.az_error_var).grid(row=0, column=2, sticky="w", padx=(52, 0))
+        ttk.Label(content, text="Limits").grid(row=0, column=3, sticky="w", padx=(14, 4))
+        ttk.Label(content, textvariable=self.limits_var).grid(row=0, column=3, sticky="w", padx=(62, 0))
+
+        ttk.Label(content, text="EL").grid(row=1, column=0, sticky="w", padx=(0, 6))
+        ttk.Label(content, textvariable=self.cal_el_var, font=("TkDefaultFont", 17, "bold")).grid(row=1, column=1, sticky="w", padx=(0, 12))
+        ttk.Label(content, text="EL err").grid(row=1, column=2, sticky="w")
+        ttk.Label(content, textvariable=self.el_error_var).grid(row=1, column=2, sticky="w", padx=(52, 0))
+        ttk.Label(content, text="Mode").grid(row=1, column=3, sticky="w", padx=(14, 4))
+        ttk.Label(content, textvariable=self.mode_var).grid(row=1, column=3, sticky="w", padx=(62, 0))
+
+        ttk.Label(content, text="Target").grid(row=2, column=2, sticky="w")
+        ttk.Label(content, textvariable=self.target_var).grid(row=2, column=2, columnspan=2, sticky="w", padx=(52, 0))
+
+        manual = ttk.Frame(content)
+        manual.grid(row=0, column=4, rowspan=3, sticky="e", padx=(14, 0))
         for col in range(3):
-            control.columnconfigure(col, weight=1)
-        self._hold_button(control, "EL+", Direction.EL_UP).grid(row=0, column=1, sticky="ew", padx=2, pady=2)
-        self._hold_button(control, "AZ-", Direction.AZ_CCW).grid(row=1, column=0, sticky="ew", padx=2, pady=2)
-        ttk.Button(control, text="STOP", command=self.stop).grid(row=1, column=1, sticky="ew", padx=2, pady=2)
-        self._hold_button(control, "AZ+", Direction.AZ_CW).grid(row=1, column=2, sticky="ew", padx=2, pady=2)
-        self._hold_button(control, "EL-", Direction.EL_DOWN).grid(row=2, column=1, sticky="ew", padx=2, pady=2)
+            manual.columnconfigure(col, minsize=64)
+        for row in range(3):
+            manual.rowconfigure(row, minsize=30)
+        self._hold_button(manual, "EL+", Direction.EL_UP).grid(row=0, column=1, sticky="ew", padx=2, pady=2)
+        self._hold_button(manual, "AZ-", Direction.AZ_CCW).grid(row=1, column=0, sticky="ew", padx=2, pady=2)
+        ttk.Button(manual, text="STOP", command=self.stop).grid(row=1, column=1, sticky="ew", padx=2, pady=2)
+        self._hold_button(manual, "AZ+", Direction.AZ_CW).grid(row=1, column=2, sticky="ew", padx=2, pady=2)
+        self._hold_button(manual, "EL-", Direction.EL_DOWN).grid(row=2, column=1, sticky="ew", padx=2, pady=2)
 
         self.reference_frame: Optional[ttk.Frame] = None
-        ttk.Label(self, textvariable=self.fault_var, foreground="red", wraplength=260).grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0)
-        )
-
-    def _position_cell(self, parent: tk.Misc, row: int, column: int, label: str, variable: tk.StringVar) -> None:
-        ttk.Label(parent, text=label).grid(row=row, column=column, sticky="w", padx=(0, 4))
-        ttk.Label(parent, textvariable=variable, font=("TkDefaultFont", 13)).grid(
-            row=row, column=column + 1, sticky="e", padx=(0, 8)
+        ttk.Label(self, textvariable=self.fault_var, foreground="red", wraplength=360).grid(
+            row=2, column=0, sticky="ew", pady=(6, 0)
         )
 
     def add_reference_block(
@@ -1459,7 +1481,7 @@ class AntennaPanel(ttk.Frame):
         utc_var: tk.StringVar,
     ) -> None:
         self.reference_frame = ttk.Frame(self)
-        self.reference_frame.grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.reference_frame.grid(row=3, column=0, sticky="w", pady=(10, 0))
         ttk.Label(self.reference_frame, textvariable=sun_var).grid(row=0, column=0, sticky="w")
         ttk.Label(self.reference_frame, textvariable=moon_var).grid(row=1, column=0, sticky="w", pady=(2, 0))
         ttk.Label(self.reference_frame, textvariable=local_time_var).grid(row=3, column=0, sticky="w", pady=(8, 0))
@@ -1467,7 +1489,7 @@ class AntennaPanel(ttk.Frame):
         ttk.Label(self.reference_frame, textvariable=utc_var).grid(row=5, column=0, sticky="w", pady=(2, 0))
 
     def _hold_button(self, master: tk.Misc, text: str, direction: Direction) -> ttk.Button:
-        button = ttk.Button(master, text=text)
+        button = ttk.Button(master, text=text, width=6)
         button.bind("<ButtonPress-1>", lambda _event: self.start_jog(direction))
         button.bind("<ButtonRelease-1>", lambda _event: self.stop_jog())
         button.bind("<Leave>", lambda _event: self.stop_jog())
@@ -1478,6 +1500,7 @@ class AntennaPanel(ttk.Frame):
         self.sync_config_settings()
         self.status_var.set("STOPPED")
         self.fault_var.set("")
+        self.mode_var.set("Auto")
         self.app.state_store.set_antenna_state(self.name, AntennaRunState.STOPPED, "")
         self.update_position(session.last_position)
 
@@ -1488,12 +1511,17 @@ class AntennaPanel(ttk.Frame):
         self.manual_jog_active = False
         self.status_var.set(status)
         self.fault_var.set(message)
+        self.mode_var.set("--")
         self.app.state_store.set_antenna_state(self.name, antenna_state_from_text(status), message)
         self.clear_position_fields()
 
     def clear_position_fields(self) -> None:
         self.cal_az_var.set("--")
         self.cal_el_var.set("--")
+        self.az_error_var.set("--")
+        self.el_error_var.set("--")
+        self.target_var.set("--")
+        self.limits_var.set("SAFE")
 
     def sync_config_settings(self) -> None:
         config = self.session.config if self.session else self.config
@@ -1509,16 +1537,36 @@ class AntennaPanel(ttk.Frame):
             return
         self.cal_az_var.set(f"{position.azimuth:0.2f}")
         self.cal_el_var.set(f"{position.elevation:0.2f}")
+        self.update_target_error(position)
         self.app.state_store.set_antenna_position(self.name, position.azimuth, position.elevation)
+
+    def update_target_error(self, position: Position) -> None:
+        target = self.app.current_target
+        if not target:
+            self.az_error_var.set("--")
+            self.el_error_var.set("--")
+            self.target_var.set("--")
+            return
+        try:
+            limits = self.session.config.limits if self.session else self.config.limits if self.config else None
+            az_error = limits.azimuth_delta_to_target(position.azimuth, target.azimuth) if limits else shortest_angle_delta(position.azimuth, target.azimuth)
+        except Exception:
+            az_error = shortest_angle_delta(position.azimuth, target.azimuth)
+        el_error = target.elevation - position.elevation
+        self.az_error_var.set(f"{az_error:+0.2f}")
+        self.el_error_var.set(f"{el_error:+0.2f}")
+        self.target_var.set(f"{target.azimuth:0.2f} / {target.elevation:0.2f}")
 
     def set_fault(self, text: str) -> None:
         self.fault_var.set(text)
         self.status_var.set("FAULT" if text else "STOPPED")
+        self.limits_var.set("FAULT" if text else "SAFE")
         self.app.state_store.set_antenna_state(self.name, AntennaRunState.FAULT if text else AntennaRunState.STOPPED, text)
 
     def set_tracking_status(self, text: str) -> None:
         if self.session and not self.fault_var.get():
             self.status_var.set(text)
+            self.mode_var.set("Auto" if text in ("TRACKING", "SLEWING", "PARKING", "YFACTOR") else text.title())
             self.app.state_store.set_antenna_state(self.name, antenna_state_from_text(text), "")
 
     def set_message(self, text: str) -> None:
@@ -1583,6 +1631,7 @@ class AntennaPanel(ttk.Frame):
         speed = self.speed_value
         self.jog_thread_active = True
         self.manual_jog_active = True
+        self.mode_var.set("Manual")
 
         def realtime_update(position: Position) -> None:
             self.queue_position_update(position)
@@ -1610,6 +1659,7 @@ class AntennaPanel(ttk.Frame):
     def finish_jog(self, position: Position) -> None:
         self.jog_thread_active = False
         self.manual_jog_active = False
+        self.mode_var.set("Auto")
         self.clear_message()
         self.update_position(position)
 
@@ -1627,10 +1677,9 @@ class AntennaPanel(ttk.Frame):
         if self.session:
             self.app.run_worker(lambda: self.session.stop_all(), lambda _result: None, self.set_fault)
 
-
 class PowerMeterPanel(ttk.LabelFrame):
     def __init__(self, master: tk.Misc, app: "WT5UbuntuAlphaApp") -> None:
-        super().__init__(master, text="RTL Power Meter", padding=8)
+        super().__init__(master, text="B210", padding=8)
         self.app = app
         self.stop_event = threading.Event()
         self.thread: Optional[threading.Thread] = None
@@ -1655,38 +1704,66 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.freq_var = tk.StringVar(value=f"{power.center_frequency_hz / 1_000_000:0.1f}")
         self.rate_var = tk.StringVar(value=f"{power.sample_rate_hz / 1000:0.0f}")
         self.gain_var = tk.StringVar(value=power.gain_db)
+        self.gain_b_var = tk.StringVar(value=power.gain_db)
         self.ppm_var = tk.StringVar(value=str(power.frequency_correction_ppm))
+        self.bandwidth_var = tk.StringVar(value=f"{power.sample_rate_hz / 2000:0.0f}")
+        self.clock_var = tk.StringVar(value="Int")
         self.samples_var = tk.StringVar(value=self.samples_display_value(power.samples_per_read))
         self.update_var = tk.StringVar(value=f"{power.update_rate_hz:0.0f}")
         self.smooth_var = tk.StringVar(value=str(power.smoothing_samples))
         self.warmup_var = tk.StringVar(value=f"{power.warmup_seconds:0.0f}")
         self.power_var = tk.StringVar(value="--.- dBFS")
-        self.status_var = tk.StringVar(value="Stopped")
+        self.power_b_var = tk.StringVar(value="--.- dBFS")
+        self.status_var = tk.StringVar(value="SDR RELEASED")
         self.stats_var = tk.StringVar(value="Avg -- Min -- Max --")
+        self.stats_b_var = tk.StringVar(value="Avg -- Min -- Max --")
+        self.owner_var = tk.StringVar(value="SDR released for other apps")
+
+        self.columnconfigure(1, weight=1)
+        ttk.Label(self, text="B210", font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="nw", padx=(0, 12))
+        ttk.Label(self, textvariable=self.status_var).grid(row=1, column=0, sticky="nw", padx=(0, 12))
+
+        channels = ttk.Frame(self)
+        channels.grid(row=0, column=1, sticky="ew")
+        channels.columnconfigure(0, weight=1)
+        channels.columnconfigure(1, weight=1)
+        self._channel_panel(channels, 0, "CH A", self.power_var, self.gain_var, self.stats_var)
+        self._channel_panel(channels, 1, "CH B", self.power_b_var, self.gain_b_var, self.stats_b_var)
 
         fields = ttk.Frame(self)
-        fields.grid(row=0, column=0, sticky="ew")
-        for column in range(16):
-            fields.columnconfigure(column, weight=1 if column % 2 else 0)
+        fields.grid(row=1, column=1, sticky="ew", pady=(6, 0))
         self._entry(fields, "Freq MHz", self.freq_var, 0, width=7)
-        self._entry(fields, "Sample ksps", self.rate_var, 2, width=6)
-        self._entry(fields, "Gain", self.gain_var, 4, width=6)
-        self._entry(fields, "PPM", self.ppm_var, 6, width=5)
-        self._entry(fields, "Samples k", self.samples_var, 8, width=7)
+        self._entry(fields, "Rate ksps", self.rate_var, 2, width=6)
+        self._entry(fields, "BW kHz", self.bandwidth_var, 4, width=6)
+        self._entry(fields, "Clock", self.clock_var, 6, width=5)
+        self._entry(fields, "Avg", self.smooth_var, 8, width=4)
         self._entry(fields, "GUI Hz", self.update_var, 10, width=5)
-        self._entry(fields, "Avg", self.smooth_var, 12, width=4)
-        self._entry(fields, "Warm s", self.warmup_var, 14, width=5)
+        ttk.Button(fields, text="SDR Power On", command=self.start).grid(row=0, column=12, sticky="w", padx=(6, 0))
+        ttk.Button(fields, text="Release SDR", command=self.stop).grid(row=0, column=13, sticky="w", padx=(6, 0))
+        ttk.Button(fields, text="Cal", command=self.app.open_rtl_calibration).grid(row=0, column=14, sticky="w", padx=(6, 0))
+        ttk.Label(fields, textvariable=self.owner_var).grid(row=0, column=15, sticky="w", padx=(10, 0))
 
-        controls = ttk.Frame(self)
-        controls.grid(row=1, column=0, sticky="ew", pady=(6, 0))
-        ttk.Button(controls, text="Start Power", command=self.start).pack(side="left")
-        ttk.Button(controls, text="Stop Power", command=self.stop).pack(side="left", padx=(6, 0))
-        ttk.Button(controls, text="RTL Cal", command=self.app.open_rtl_calibration).pack(side="left", padx=(6, 0))
-        ttk.Button(controls, text="Start Log", command=self.start_log).pack(side="left", padx=(6, 0))
-        ttk.Button(controls, text="Stop Log", command=self.stop_log).pack(side="left", padx=(6, 0))
-        ttk.Label(controls, textvariable=self.power_var, font=("TkDefaultFont", 13)).pack(side="left", padx=(18, 0))
-        ttk.Label(controls, textvariable=self.status_var).pack(side="left", padx=(14, 0))
-        ttk.Label(controls, textvariable=self.stats_var).pack(side="left", padx=(14, 0))
+        log_controls = ttk.Frame(self)
+        log_controls.grid(row=2, column=1, sticky="w", pady=(6, 0))
+        ttk.Button(log_controls, text="Start Log", command=self.start_log).pack(side="left")
+        ttk.Button(log_controls, text="Stop Log", command=self.stop_log).pack(side="left", padx=(6, 0))
+
+    def _channel_panel(
+        self,
+        parent: tk.Misc,
+        column: int,
+        title: str,
+        power_var: tk.StringVar,
+        gain_var: tk.StringVar,
+        stats_var: tk.StringVar,
+    ) -> None:
+        frame = ttk.Frame(parent)
+        frame.grid(row=0, column=column, sticky="ew", padx=(0, 18 if column == 0 else 0))
+        ttk.Label(frame, text=title, font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(frame, textvariable=power_var, font=("TkDefaultFont", 13, "bold")).grid(row=0, column=1, sticky="w", padx=(10, 0))
+        ttk.Label(frame, text="Gain").grid(row=1, column=0, sticky="w", pady=(2, 0))
+        ttk.Entry(frame, textvariable=gain_var, width=6).grid(row=1, column=1, sticky="w", padx=(10, 0), pady=(2, 0))
+        ttk.Label(frame, textvariable=stats_var).grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
     def _entry(self, parent: tk.Misc, label: str, variable: tk.StringVar, column: int, width: int) -> None:
         ttk.Label(parent, text=label).grid(row=0, column=column, sticky="w", padx=(0, 2))
@@ -1751,7 +1828,9 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.freq_var.set(f"{power.center_frequency_hz / 1_000_000:0.1f}")
         self.rate_var.set(f"{power.sample_rate_hz / 1000:0.0f}")
         self.gain_var.set(power.gain_db)
+        self.gain_b_var.set(power.gain_db)
         self.ppm_var.set(str(power.frequency_correction_ppm))
+        self.bandwidth_var.set(f"{power.sample_rate_hz / 2000:0.0f}")
         self.samples_var.set(self.samples_display_value(power.samples_per_read))
         self.update_var.set(f"{power.update_rate_hz:0.0f}")
         self.smooth_var.set(str(power.smoothing_samples))
@@ -1775,7 +1854,7 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.log_writer = None
         self.log_path = None
         if not (self.thread and self.thread.is_alive()):
-            self.status_var.set("Stopped")
+            self.status_var.set("SDR RELEASED")
 
     def log_header(self) -> list[str]:
         header = [
@@ -1832,9 +1911,9 @@ class PowerMeterPanel(ttk.LabelFrame):
     def start(self) -> None:
         if self.thread and self.thread.is_alive():
             if self.last_reading_time and time.monotonic() - self.last_reading_time < 2.0:
-                self.status_var.set("Already running")
+                self.status_var.set("SDR POWER ON")
             else:
-                self.status_var.set("Running but no readings; press Stop Power and wait.")
+                self.status_var.set("Running but no readings; press Release SDR and wait.")
             return
         try:
             power_config = self.power_config_from_fields()
@@ -1857,11 +1936,14 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.latest_power_calibrated = False
         self.latest_power_extrapolated = False
         self.power_var.set("--.- dBFS")
+        self.power_b_var.set("--.- dBFS")
         self.stats_var.set("Avg -- Min -- Max --")
+        self.stats_b_var.set("Avg -- Min -- Max --")
         self.stop_event.clear()
-        self.status_var.set(f"Starting... {config.samples_per_update} samples/read")
+        self.status_var.set("SDR POWER ON")
+        self.owner_var.set("WT6 owns B210 while SDR power is on")
         self.app.event_log.info(
-            "RTL_POWER_START",
+            "B210_POWER_UI_START",
             frequency_hz=power_config.center_frequency_hz,
             sample_rate_hz=power_config.sample_rate_hz,
             gain=power_config.gain_db,
@@ -1878,12 +1960,13 @@ class PowerMeterPanel(ttk.LabelFrame):
             meter = self.meter
             if meter:
                 meter.cancel()
-            self.status_var.set("Stopping...")
+            self.status_var.set("Releasing SDR...")
         else:
             self.thread = None
             self.meter = None
-            self.status_var.set("Stopped")
-        self.app.event_log.info("RTL_POWER_STOP")
+            self.status_var.set("SDR RELEASED")
+            self.owner_var.set("SDR released for other apps")
+        self.app.event_log.info("B210_POWER_UI_STOP")
 
     def power_loop(self, config: PowerMeterConfig) -> None:
         try:
@@ -1917,6 +2000,7 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.latest_power_extrapolated = bool(measurement["power_extrapolated"])
         suffix = " EXT" if self.latest_power_extrapolated else ""
         self.power_var.set(f"{self.latest_power_value:0.1f} {self.latest_power_unit}{suffix}")
+        self.power_b_var.set("--.- dBFS")
         self.history_values.append(average)
         self.history_values = self.history_values[-600:]
         self.history_display_values.append(self.latest_power_value)
@@ -1926,6 +2010,7 @@ class PowerMeterPanel(ttk.LabelFrame):
             f"Avg {history_average:0.1f} Min {min(self.history_display_values):0.1f} "
             f"Max {max(self.history_display_values):0.1f}"
         )
+        self.stats_b_var.set("Avg -- Min -- Max --")
         self.log_reading(average)
         self.refresh_warmup_status(None)
         self.app.state_store.set_power(
@@ -1989,7 +2074,7 @@ class PowerMeterPanel(ttk.LabelFrame):
         if remaining > 0:
             self.status_var.set(f"Warming {remaining:0.0f}s {suffix}".strip())
         else:
-            self.status_var.set(f"Ready {suffix}".strip())
+            self.status_var.set(f"SDR POWER ON {suffix}".strip())
         self.app.state_store.set_power(
             run_state=PowerRunState.WARMING if remaining > 0 else PowerRunState.READY,
             message=self.status_var.get(),
@@ -2004,7 +2089,8 @@ class PowerMeterPanel(ttk.LabelFrame):
         return "UNCAL"
 
     def set_status(self, text: str) -> None:
-        self.status_var.set(text)
+        self.status_var.set(f"SDR FAULT: {text}")
+        self.owner_var.set("SDR fault; release before other apps use B210")
         self.app.state_store.set_power(PowerRunState.FAULT, message=text)
 
     def finish_stopped(self, _unused: object) -> None:
@@ -2021,17 +2107,12 @@ class PowerMeterPanel(ttk.LabelFrame):
             self.latest_power_extrapolated = False
             self.active_calibration = None
             self.power_var.set("--.- dBFS")
+            self.power_b_var.set("--.- dBFS")
             self.stats_var.set("Avg -- Min -- Max --")
-            self.status_var.set("Stopped")
-            self.app.state_store.set_power(
-                PowerRunState.STOPPED,
-                value=None,
-                unit="dBFS",
-                calibrated=False,
-                extrapolated=False,
-                message="Stopped",
-            )
-
+            self.stats_b_var.set("Avg -- Min -- Max --")
+            self.status_var.set("SDR RELEASED")
+            self.owner_var.set("SDR released for other apps")
+            self.app.state_store.reset_power("SDR RELEASED")
 class RtlCalibrationDialog(tk.Toplevel):
     LEVELS_DBM = RTL_CAL_LEVELS_DBM
 
@@ -2713,42 +2794,53 @@ class WT5UbuntuAlphaApp(tk.Tk):
         ttk.Button(top_row_2, text="Stop Track", command=self.stop_sun_tracking).pack(side="left", padx=(6, 0))
         ttk.Button(top_row_2, text="Park", command=self.park_all).pack(side="left", padx=(6, 0))
 
-        target_bar = ttk.Frame(self, padding=(8, 0, 8, 2))
-        target_bar.pack(fill="x")
-        ttk.Label(target_bar, textvariable=self.target_name_var).pack(side="left")
-        ttk.Label(target_bar, textvariable=self.target_az_var).pack(side="left", padx=(16, 0))
-        ttk.Label(target_bar, textvariable=self.target_el_var).pack(side="left", padx=(16, 0))
-        target_detail_bar = ttk.Frame(self, padding=(8, 0, 8, 2))
-        target_detail_bar.pack(fill="x")
-        ttk.Label(target_detail_bar, textvariable=self.target_ha_var).pack(side="left")
+        summary = ttk.Frame(self, padding=(8, 2, 8, 2))
+        summary.pack(fill="x")
+        summary.columnconfigure(0, weight=1)
+        summary.columnconfigure(1, weight=2)
+
+        source_panel = ttk.Frame(summary, relief="solid", borderwidth=1, padding=8)
+        source_panel.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ttk.Label(source_panel, text="SOURCE", font=("TkDefaultFont", 10, "bold")).pack(side="left")
+        ttk.Label(source_panel, textvariable=self.target_name_var).pack(side="left", padx=(8, 0))
+        ttk.Label(source_panel, textvariable=self.target_az_var, font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=(18, 0))
+        ttk.Label(source_panel, textvariable=self.target_el_var, font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=(18, 0))
+        ttk.Label(source_panel, textvariable=self.target_ha_var, font=("TkDefaultFont", 12, "bold")).pack(side="left", padx=(18, 0))
+
+        reference_panel = ttk.Frame(summary, relief="solid", borderwidth=1, padding=8)
+        reference_panel.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+        reference_top = ttk.Frame(reference_panel)
+        reference_top.pack(fill="x")
+        ttk.Label(reference_top, textvariable=self.lmst_var).pack(side="left")
+        ttk.Label(reference_top, textvariable=self.utc_var).pack(side="left", padx=(18, 0))
+        ttk.Label(reference_top, textvariable=self.local_time_var).pack(side="left", padx=(18, 0))
+        reference_bottom = ttk.Frame(reference_panel)
+        reference_bottom.pack(fill="x", pady=(6, 0))
+        ttk.Label(reference_bottom, textvariable=self.sun_ref_var, font=("TkDefaultFont", 10, "bold")).pack(side="left")
+        ttk.Label(reference_bottom, textvariable=self.moon_ref_var, font=("TkDefaultFont", 10, "bold")).pack(side="left", padx=(24, 0))
+
         timeout_bar = ttk.Frame(self, padding=(8, 0, 8, 2))
         timeout_bar.pack(fill="x")
         ttk.Label(timeout_bar, textvariable=self.timeout_var).pack(side="left")
+        ttk.Label(timeout_bar, textvariable=self.status_var, foreground="red").pack(side="left", padx=(18, 0))
 
         body = ttk.Frame(self, padding=8)
         body.pack(fill="both", expand=True)
         body.columnconfigure(0, weight=1)
         body.columnconfigure(1, weight=1)
+        body.rowconfigure(0, weight=0)
+        body.rowconfigure(1, weight=0)
 
         self.panels: dict[str, AntennaPanel] = {}
         names = list(self.configs) or ["antenna_a", "antenna_b"]
         for index, name in enumerate(names[:2]):
             panel = AntennaPanel(body, self, name, self.configs.get(name))
-            panel.grid(row=0, column=index, sticky="nsew", padx=4)
-            if index == 0:
-                panel.add_reference_block(
-                    self.sun_ref_var,
-                    self.moon_ref_var,
-                    self.local_time_var,
-                    self.lmst_var,
-                    self.utc_var,
-                )
+            panel.grid(row=0, column=index, sticky="ew", padx=4, pady=(0, 8))
             self.panels[name] = panel
             self.state_store.set_antenna_state(name, AntennaRunState.DISCONNECTED)
 
         self.power_panel = PowerMeterPanel(body, self)
-        self.power_panel.grid(row=1, column=0, columnspan=2, sticky="ew", padx=4, pady=(10, 0))
-
+        self.power_panel.grid(row=1, column=0, columnspan=2, sticky="ew", padx=4, pady=(2, 0))
         if not self.configs:
             self.status_var.set(f"No antennas found in {config_path}. Copy wt5_ubuntu.ini.example to wt5_ubuntu.ini.")
 
@@ -4736,5 +4828,9 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
+
 
 
