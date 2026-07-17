@@ -1735,17 +1735,18 @@ class PowerMeterPanel(ttk.LabelFrame):
 
         fields = ttk.Frame(self)
         fields.grid(row=1, column=1, sticky="ew", pady=(6, 0))
+        fields.columnconfigure(12, weight=1)
         self._entry(fields, "Freq MHz", self.freq_var, 0, width=7)
         self._entry(fields, "Rate ksps", self.rate_var, 2, width=6)
         self._entry(fields, "BW kHz", self.bandwidth_var, 4, width=6)
         self._entry(fields, "Clock", self.clock_var, 6, width=8)
         self._entry(fields, "Avg", self.smooth_var, 8, width=4)
         self._entry(fields, "GUI Hz", self.update_var, 10, width=5)
-        ttk.Button(fields, text="SDR Power On", command=self.start).grid(row=0, column=12, sticky="w", padx=(6, 0))
-        ttk.Button(fields, text="Release SDR", command=self.stop).grid(row=0, column=13, sticky="w", padx=(6, 0))
-        ttk.Button(fields, text="Cal", command=self.show_b210_calibration_pending).grid(row=0, column=14, sticky="w", padx=(6, 0))
-        ttk.Button(fields, text="Start Log", command=self.start_log).grid(row=0, column=15, sticky="w", padx=(12, 0))
-        ttk.Button(fields, text="Stop Log", command=self.stop_log).grid(row=0, column=16, sticky="w", padx=(6, 0))
+        ttk.Button(fields, text="SDR Power On", command=self.start).grid(row=0, column=13, sticky="e", padx=(16, 0))
+        ttk.Button(fields, text="Release SDR", command=self.stop).grid(row=0, column=14, sticky="e", padx=(6, 0))
+        ttk.Button(fields, text="Cal", command=self.show_b210_calibration_pending).grid(row=0, column=15, sticky="e", padx=(6, 0))
+        ttk.Button(fields, text="Start Log", command=self.start_log).grid(row=0, column=16, sticky="e", padx=(14, 0))
+        ttk.Button(fields, text="Stop Log", command=self.stop_log).grid(row=0, column=17, sticky="e", padx=(6, 0))
 
     def _channel_panel(
         self,
@@ -1766,7 +1767,7 @@ class PowerMeterPanel(ttk.LabelFrame):
 
     def _entry(self, parent: tk.Misc, label: str, variable: tk.StringVar, column: int, width: int) -> None:
         ttk.Label(parent, text=label).grid(row=0, column=column, sticky="w", padx=(0, 2))
-        ttk.Entry(parent, textvariable=variable, width=width).grid(row=0, column=column + 1, sticky="w", padx=(0, 8))
+        ttk.Entry(parent, textvariable=variable, width=width).grid(row=0, column=column + 1, sticky="w", padx=(0, 5))
 
     def show_b210_calibration_pending(self) -> None:
         message = "B210 calibration is not connected yet; the old RTL calibration path is disabled from this GUI."
