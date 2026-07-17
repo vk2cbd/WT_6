@@ -1740,7 +1740,7 @@ class PowerMeterPanel(ttk.LabelFrame):
         self._entry(fields, "GUI Hz", self.update_var, 10, width=5)
         ttk.Button(fields, text="SDR Power On", command=self.start).grid(row=0, column=12, sticky="w", padx=(6, 0))
         ttk.Button(fields, text="Release SDR", command=self.stop).grid(row=0, column=13, sticky="w", padx=(6, 0))
-        ttk.Button(fields, text="Cal", command=self.app.open_rtl_calibration).grid(row=0, column=14, sticky="w", padx=(6, 0))
+        ttk.Button(fields, text="Cal", command=self.show_b210_calibration_pending).grid(row=0, column=14, sticky="w", padx=(6, 0))
         ttk.Label(fields, textvariable=self.owner_var).grid(row=0, column=15, sticky="w", padx=(10, 0))
 
         log_controls = ttk.Frame(self)
@@ -1768,6 +1768,12 @@ class PowerMeterPanel(ttk.LabelFrame):
     def _entry(self, parent: tk.Misc, label: str, variable: tk.StringVar, column: int, width: int) -> None:
         ttk.Label(parent, text=label).grid(row=0, column=column, sticky="w", padx=(0, 2))
         ttk.Entry(parent, textvariable=variable, width=width).grid(row=0, column=column + 1, sticky="w", padx=(0, 8))
+
+    def show_b210_calibration_pending(self) -> None:
+        message = "B210 calibration is not connected yet; the old RTL calibration path is disabled from this GUI."
+        self.status_var.set("B210 CAL PENDING")
+        self.owner_var.set(message)
+        self.app.event_log.info("B210_CAL_PENDING")
 
     def samples_display_value(self, stored_value: str) -> str:
         text = stored_value.strip().lower()
@@ -1909,15 +1915,8 @@ class PowerMeterPanel(ttk.LabelFrame):
             self.log_handle.flush()
 
     def start(self) -> None:
-        if self.thread and self.thread.is_alive():
-            if self.last_reading_time and time.monotonic() - self.last_reading_time < 2.0:
-                self.status_var.set("SDR POWER ON")
-            else:
-                self.status_var.set("Running but no readings; press Release SDR and wait.")
-            return
         try:
             power_config = self.power_config_from_fields()
-            config = self.meter_config_from_fields()
         except Exception as exc:
             self.status_var.set(str(exc))
             return
@@ -1928,9 +1927,10 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.history_values.clear()
         self.history_display_values.clear()
         self.last_reading_time = 0.0
-        self.power_started_at = time.monotonic()
+        self.power_started_at = 0.0
         self.warmup_seconds = power_config.warmup_seconds
-        self.active_calibration = self.load_active_calibration(power_config)
+        self.active_calibration = None
+        self.latest_power_dbfs = None
         self.latest_power_value = None
         self.latest_power_unit = "dBFS"
         self.latest_power_calibrated = False
@@ -1939,21 +1939,21 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.power_b_var.set("--.- dBFS")
         self.stats_var.set("Avg -- Min -- Max --")
         self.stats_b_var.set("Avg -- Min -- Max --")
-        self.stop_event.clear()
-        self.status_var.set("SDR POWER ON")
-        self.owner_var.set("WT6 owns B210 while SDR power is on")
+        self.stop_event.set()
+        self.thread = None
+        self.meter = None
+        self.status_var.set("B210 BACKEND PENDING")
+        self.owner_var.set("B210 power measurement is not connected yet; no RTL-SDR will be opened.")
+        self.app.state_store.reset_power("B210 backend pending")
         self.app.event_log.info(
-            "B210_POWER_UI_START",
+            "B210_POWER_BACKEND_PENDING",
             frequency_hz=power_config.center_frequency_hz,
             sample_rate_hz=power_config.sample_rate_hz,
-            gain=power_config.gain_db,
-            samples_per_read=power_config.samples_per_read,
+            gain_a=self.gain_var.get().strip(),
+            gain_b=self.gain_b_var.get().strip(),
+            bandwidth_khz=self.bandwidth_var.get().strip(),
             update_rate_hz=power_config.update_rate_hz,
-            calibrated=bool(self.active_calibration),
         )
-        self.thread = threading.Thread(target=self.power_loop, args=(config,), daemon=True)
-        self.thread.start()
-
     def stop(self) -> None:
         self.stop_event.set()
         if self.thread and self.thread.is_alive():
