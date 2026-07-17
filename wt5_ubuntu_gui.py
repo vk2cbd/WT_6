@@ -45,6 +45,7 @@ from wt5_antenna import AntennaConfig, Axis, Direction, EncoderInfo, Position, S
 from wt5_logging import EventLogger
 from wt5_power import PowerMeterConfig, PowerReading, RtlPowerMeter
 from wt5_solar import sun_equatorial, sun_position
+from wt5_state import AppStateStore, AntennaRunState, PowerRunState, SystemRunState, antenna_state_from_text
 
 
 APP_VERSION = "v0.2-alpha"
@@ -1477,6 +1478,7 @@ class AntennaPanel(ttk.Frame):
         self.sync_config_settings()
         self.status_var.set("STOPPED")
         self.fault_var.set("")
+        self.app.state_store.set_antenna_state(self.name, AntennaRunState.STOPPED, "")
         self.update_position(session.last_position)
 
     def detach(self, status: str = "DISCONNECTED", message: str = "") -> None:
@@ -1486,6 +1488,7 @@ class AntennaPanel(ttk.Frame):
         self.manual_jog_active = False
         self.status_var.set(status)
         self.fault_var.set(message)
+        self.app.state_store.set_antenna_state(self.name, antenna_state_from_text(status), message)
         self.clear_position_fields()
 
     def clear_position_fields(self) -> None:
@@ -1506,24 +1509,29 @@ class AntennaPanel(ttk.Frame):
             return
         self.cal_az_var.set(f"{position.azimuth:0.2f}")
         self.cal_el_var.set(f"{position.elevation:0.2f}")
+        self.app.state_store.set_antenna_position(self.name, position.azimuth, position.elevation)
 
     def set_fault(self, text: str) -> None:
         self.fault_var.set(text)
         self.status_var.set("FAULT" if text else "STOPPED")
+        self.app.state_store.set_antenna_state(self.name, AntennaRunState.FAULT if text else AntennaRunState.STOPPED, text)
 
     def set_tracking_status(self, text: str) -> None:
         if self.session and not self.fault_var.get():
             self.status_var.set(text)
+            self.app.state_store.set_antenna_state(self.name, antenna_state_from_text(text), "")
 
     def set_message(self, text: str) -> None:
         self.fault_var.set(text)
         if self.session:
             self.status_var.set("STOPPED")
+            self.app.state_store.set_antenna_state(self.name, AntennaRunState.STOPPED, text)
 
     def clear_message(self) -> None:
         self.fault_var.set("")
         if self.session:
             self.status_var.set("STOPPED")
+            self.app.state_store.set_antenna_state(self.name, AntennaRunState.STOPPED, "")
 
     def refresh(self) -> None:
         if not self.session:
@@ -1920,6 +1928,14 @@ class PowerMeterPanel(ttk.LabelFrame):
         )
         self.log_reading(average)
         self.refresh_warmup_status(None)
+        self.app.state_store.set_power(
+            run_state=PowerRunState.WARMING if self.is_warming() else PowerRunState.READY,
+            value=self.latest_power_value,
+            unit=self.latest_power_unit,
+            calibrated=self.latest_power_calibrated,
+            extrapolated=self.latest_power_extrapolated,
+            message=self.status_var.get(),
+        )
 
     def load_active_calibration(self, power: PowerConfig) -> Optional[RtlCalibration]:
         try:
@@ -1974,6 +1990,10 @@ class PowerMeterPanel(ttk.LabelFrame):
             self.status_var.set(f"Warming {remaining:0.0f}s {suffix}".strip())
         else:
             self.status_var.set(f"Ready {suffix}".strip())
+        self.app.state_store.set_power(
+            run_state=PowerRunState.WARMING if remaining > 0 else PowerRunState.READY,
+            message=self.status_var.get(),
+        )
 
     def calibration_status_suffix(self) -> str:
         if self.latest_power_calibrated or self.active_calibration:
@@ -1985,6 +2005,7 @@ class PowerMeterPanel(ttk.LabelFrame):
 
     def set_status(self, text: str) -> None:
         self.status_var.set(text)
+        self.app.state_store.set_power(PowerRunState.FAULT, message=text)
 
     def finish_stopped(self, _unused: object) -> None:
         self.thread = None
@@ -2002,7 +2023,14 @@ class PowerMeterPanel(ttk.LabelFrame):
             self.power_var.set("--.- dBFS")
             self.stats_var.set("Avg -- Min -- Max --")
             self.status_var.set("Stopped")
-
+            self.app.state_store.set_power(
+                PowerRunState.STOPPED,
+                value=None,
+                unit="dBFS",
+                calibrated=False,
+                extrapolated=False,
+                message="Stopped",
+            )
 
 class RtlCalibrationDialog(tk.Toplevel):
     LEVELS_DBM = RTL_CAL_LEVELS_DBM
@@ -2611,6 +2639,7 @@ class WT5UbuntuAlphaApp(tk.Tk):
         self.scan_config = load_scan_config(config_path)
         self.yfactor_config = load_yfactor_config(config_path)
         self.event_log = EventLogger(Path(config_path).parent, self.site.log_retention_days, self.site.log_level)
+        self.state_store = AppStateStore()
         self.event_log.info("APP_START", version=APP_VERSION, config=str(config_path))
         self.sessions: dict[str, SafeAntenna] = {}
         self.events: queue.Queue[tuple[str, object, object]] = queue.Queue()
@@ -2640,6 +2669,7 @@ class WT5UbuntuAlphaApp(tk.Tk):
         self.scan_offset_degrees = 0.0
         self.tracking_kind = ""
         self.current_target: Optional[TargetPosition] = None
+        self.state_store.set_status("Load config, connect antennas, then use guarded jogs.", SystemRunState.IDLE)
         self.target_name_var = tk.StringVar(value="Target --")
         self.target_az_var = tk.StringVar(value="AZ --")
         self.target_el_var = tk.StringVar(value="EL --")
@@ -2714,6 +2744,7 @@ class WT5UbuntuAlphaApp(tk.Tk):
                     self.utc_var,
                 )
             self.panels[name] = panel
+            self.state_store.set_antenna_state(name, AntennaRunState.DISCONNECTED)
 
         self.power_panel = PowerMeterPanel(body, self)
         self.power_panel.grid(row=1, column=0, columnspan=2, sticky="ew", padx=4, pady=(10, 0))
@@ -3999,6 +4030,7 @@ class WT5UbuntuAlphaApp(tk.Tk):
         self.target_az_var.set(f"AZ {target.azimuth:0.2f}")
         self.target_el_var.set(f"EL {target.elevation:0.2f}")
         self.target_ha_var.set(self.current_hour_angle_text())
+        self.state_store.set_target(target.name, target.azimuth, target.elevation, self.target_ha_var.get())
 
     def apply_yfactor_target_position(self, target_label: str) -> None:
         target = self.yfactor_hot_target(target_label)
@@ -4007,6 +4039,7 @@ class WT5UbuntuAlphaApp(tk.Tk):
         self.target_az_var.set(f"AZ {target.azimuth:0.2f}")
         self.target_el_var.set(f"EL {target.elevation:0.2f}")
         self.target_ha_var.set(self.current_hour_angle_text(self.kind_for_yfactor_target(target_label)))
+        self.state_store.set_target(target.name, target.azimuth, target.elevation, self.target_ha_var.get())
 
     def current_hour_angle_text(self, kind: Optional[str] = None) -> str:
         now = datetime.now(timezone.utc)
@@ -4650,6 +4683,25 @@ class WT5UbuntuAlphaApp(tk.Tk):
 
     def set_status(self, text: str) -> None:
         self.status_var.set(text)
+        self.state_store.set_status(text, self.system_state_from_flags(text))
+
+    def system_state_from_flags(self, text: str = "") -> SystemRunState:
+        lowered = text.lower()
+        if "fault" in lowered or "error" in lowered:
+            return SystemRunState.FAULT
+        if self.parking_active:
+            return SystemRunState.PARKING
+        if self.scan_active:
+            return SystemRunState.SCANNING
+        if self.yfactor_active:
+            return SystemRunState.YFACTOR
+        if self.tracking_active:
+            return SystemRunState.TRACKING
+        if self.connecting_active:
+            return SystemRunState.CONNECTING
+        if "stopped" in lowered:
+            return SystemRunState.STOPPED
+        return SystemRunState.IDLE
 
     def on_close(self) -> None:
         try:
@@ -4684,6 +4736,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
 
 
