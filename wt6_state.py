@@ -1,4 +1,4 @@
-"""GUI-facing state model for WT5.
+"""GUI-facing state model for WT6.
 
 This module deliberately contains no Tkinter or hardware I/O. It gives the
 controller code a single place to publish what the GUI should display, which is
@@ -180,4 +180,5 @@ def antenna_state_from_text(text: str) -> AntennaRunState:
         if normalized.startswith("CAL "):
             return AntennaRunState.TRACKING
         return AntennaRunState.CONNECTED
+
 

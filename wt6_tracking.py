@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tracking target helpers for WT5 Ubuntu Alpha."""
+"""Tracking target helpers for WT6."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from wt5_astro import TargetPosition, local_sidereal_time, moon_position, source_position
-from wt5_config import SiteConfig, SourceConfig
-from wt5_solar import sun_position
+from wt6_astro import TargetPosition, local_sidereal_time, moon_position, source_position
+from wt6_config import SiteConfig, SourceConfig
+from wt6_solar import sun_position
 
 
 @dataclass(frozen=True)
@@ -40,6 +40,7 @@ def compute_target(
 
 
 __all__ = ["TargetPosition", "TrackingTarget", "compute_target", "local_sidereal_time"]
+
 
 
 

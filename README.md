@@ -1,13 +1,11 @@
-# WT5 Ubuntu Alpha
+# WT6
 
-Ubuntu alpha port of the two-antenna radio astronomy controller developed from
-WT5. The code is intended to run on an Ubuntu desktop or small-form-factor PC
+Ubuntu alpha port of the two-antenna radio astronomy controller, now renamed and packaged as WT6. The code is intended to run on an Ubuntu desktop or small-form-factor PC
 with two Arduino antenna controllers and an optional RTL-SDR power meter.
 
 ## Status
 
-This is an alpha port. It keeps the WT5 control logic and safety rules, but
-renames the modules and adds Ubuntu-first setup notes.
+This is an alpha port. It keeps the existing control logic and safety rules, but renames the modules and adds Ubuntu-first setup notes.
 
 ## Ubuntu Setup
 
@@ -48,21 +46,21 @@ python3 -m pip install -r requirements.txt
 Copy the example config:
 
 ```bash
-cp wt5_ubuntu.ini.example wt5_ubuntu.ini
+cp wt6_ubuntu.ini.example wt6_ubuntu.ini
 ```
 
-Edit the antenna serial ports in `wt5_ubuntu.ini`. On Ubuntu these will usually
+Edit the antenna serial ports in `wt6_ubuntu.ini`. On Ubuntu these will usually
 look like `/dev/ttyUSB0`, `/dev/ttyUSB1`, `/dev/ttyACM0`, or `/dev/ttyACM1`.
 
 Run the GUI:
 
 ```bash
-python3 wt5_ubuntu_gui.py --config wt5_ubuntu.ini
+python3 wt6_ubuntu_gui.py --config wt6_ubuntu.ini
 ```
 
-## Migrating From WT5
+## Migrating From Earlier WT Versions
 
-An existing `WT5.ini` can usually be copied to `wt5_ubuntu.ini`; then check:
+An existing earlier WT `.ini` can usually be copied to `wt6_ubuntu.ini`; then check:
 
 - antenna serial ports
 - observer location
@@ -90,9 +88,11 @@ An existing `WT5.ini` can usually be copied to `wt5_ubuntu.ini`; then check:
 
 ## Main Files
 
-- `wt5_ubuntu_gui.py` - Tkinter operator interface and orchestration
-- `wt5_antenna.py` - Arduino protocol, controller session, and guarded motion
-- `wt5_config.py` - `.ini` loading/saving
-- `wt5_power.py` - RTL-SDR power meter primitives
-- `wt5_astro.py` / `wt5_solar.py` - source, Sun, and Moon position calculations
-- `wt5_logging.py` - JSON-lines event log
+- `wt6_ubuntu_gui.py` - Tkinter operator interface and orchestration
+- `wt6_antenna.py` - Arduino protocol, controller session, and guarded motion
+- `wt6_config.py` - `.ini` loading/saving
+- `wt6_power.py` - RTL-SDR power meter primitives
+- `wt6_astro.py` / `wt6_solar.py` - source, Sun, and Moon position calculations
+- `wt6_logging.py` - JSON-lines event log
+
+

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small solar position helper for WT5 Ubuntu Alpha.
+"""Small solar position helper for WT6.
 
 The calculation follows the common NOAA solar position approximation. It is
 adequate for initial antenna tracking tests without adding a heavy dependency.
@@ -137,6 +137,7 @@ def _rad(value: float) -> float:
 
 def _deg(value: float) -> float:
     return math.degrees(value)
+
 
 
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WT5 Ubuntu Alpha hardware driver and safety model.
+WT6 hardware driver and safety model.
 
 This file contains the decoded WinTrak Arduino protocol plus calibration and
 software-limit helpers used by the GUI.
@@ -1036,6 +1036,7 @@ def _reached_stop_tolerance(current_error: float, stop_tolerance: float, directi
 
 def clamp_speed(speed: int) -> int:
     return max(0, min(100, int(speed)))
+
 
 
 

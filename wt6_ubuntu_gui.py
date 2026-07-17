@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WT5 Ubuntu Alpha two-antenna safety/calibration GUI."""
+"""WT6 two-antenna safety/calibration GUI."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Callable, Optional
 
-from wt5_astro import TargetPosition, local_sidereal_time, moon_equatorial, moon_position, source_position
-from wt5_config import (
+from wt6_astro import TargetPosition, local_sidereal_time, moon_equatorial, moon_position, source_position
+from wt6_config import (
     PowerConfig,
     RtlCalibration,
     RTL_CAL_LEVELS_DBM,
@@ -41,11 +41,11 @@ from wt5_config import (
     save_sources,
     save_yfactor_config,
 )
-from wt5_antenna import AntennaConfig, Axis, Direction, EncoderInfo, Position, SafeAntenna, SafetyError, shortest_angle_delta
-from wt5_logging import EventLogger
-from wt5_power import PowerMeterConfig, PowerReading, RtlPowerMeter
-from wt5_solar import sun_equatorial, sun_position
-from wt5_state import AppStateStore, AntennaRunState, PowerRunState, SystemRunState, antenna_state_from_text
+from wt6_antenna import AntennaConfig, Axis, Direction, EncoderInfo, Position, SafeAntenna, SafetyError, shortest_angle_delta
+from wt6_logging import EventLogger
+from wt6_power import PowerMeterConfig, PowerReading, RtlPowerMeter
+from wt6_solar import sun_equatorial, sun_position
+from wt6_state import AppStateStore, AntennaRunState, PowerRunState, SystemRunState, antenna_state_from_text
 
 
 APP_VERSION = "v0.2-alpha"
@@ -56,7 +56,7 @@ def axis_label(axis: Axis) -> str:
 
 
 class LimitsDialog(tk.Toplevel):
-    def __init__(self, app: "WT5UbuntuAlphaApp") -> None:
+    def __init__(self, app: "WT6App") -> None:
         super().__init__(app)
         self.app = app
         self.title("Antenna Limits")
@@ -225,7 +225,7 @@ class LimitsDialog(tk.Toplevel):
 
 
 class ObserverDialog(tk.Toplevel):
-    def __init__(self, app: "WT5UbuntuAlphaApp") -> None:
+    def __init__(self, app: "WT6App") -> None:
         super().__init__(app)
         self.app = app
         self.title("Observer")
@@ -282,7 +282,7 @@ class ObserverDialog(tk.Toplevel):
 
 
 class SourcesDialog(tk.Toplevel):
-    def __init__(self, app: "WT5UbuntuAlphaApp") -> None:
+    def __init__(self, app: "WT6App") -> None:
         super().__init__(app)
         self.app = app
         self.title("Sources")
@@ -455,7 +455,7 @@ class SourcesDialog(tk.Toplevel):
 
 
 class CalibrationDialog(tk.Toplevel):
-    def __init__(self, app: "WT5UbuntuAlphaApp") -> None:
+    def __init__(self, app: "WT6App") -> None:
         super().__init__(app)
         self.app = app
         self.closed = False
@@ -689,7 +689,7 @@ class CalibrationDialog(tk.Toplevel):
 class PeakCalibrationDialog(tk.Toplevel):
     SOURCE_LABELS = ("Sun", "Moon", "Selected Source")
 
-    def __init__(self, app: "WT5UbuntuAlphaApp") -> None:
+    def __init__(self, app: "WT6App") -> None:
         super().__init__(app)
         self.app = app
         self.title("Peak Calibration")
@@ -1077,7 +1077,7 @@ class EncodersDialog(tk.Toplevel):
         "Mode",
     )
 
-    def __init__(self, app: "WT5UbuntuAlphaApp") -> None:
+    def __init__(self, app: "WT6App") -> None:
         super().__init__(app)
         self.app = app
         self.title("Encoders")
@@ -1174,7 +1174,7 @@ class EncodersDialog(tk.Toplevel):
         if not messagebox.askyesno(
             "Set Encoder Position",
             f"Set {name} {axis_label} Arduino position to {position:0.2f}?\n\n"
-            "This resets the WT5 Ubuntu Alpha software calibration offset for this axis to zero.",
+            "This resets the WT6 software calibration offset for this axis to zero.",
             parent=self,
         ):
             return
@@ -1201,7 +1201,7 @@ class EncodersDialog(tk.Toplevel):
 
 
 class TrackingDialog(tk.Toplevel):
-    def __init__(self, app: "WT5UbuntuAlphaApp") -> None:
+    def __init__(self, app: "WT6App") -> None:
         super().__init__(app)
         self.app = app
         self.title("Tracking")
@@ -1396,7 +1396,7 @@ class TrackingDialog(tk.Toplevel):
 
 
 class AntennaPanel(ttk.Frame):
-    def __init__(self, master: tk.Misc, app: "WT5UbuntuAlphaApp", name: str, config: Optional[AntennaConfig] = None) -> None:
+    def __init__(self, master: tk.Misc, app: "WT6App", name: str, config: Optional[AntennaConfig] = None) -> None:
         super().__init__(master, padding=8, relief="solid", borderwidth=1)
         self.app = app
         self.name = name
@@ -1678,7 +1678,7 @@ class AntennaPanel(ttk.Frame):
             self.app.run_worker(lambda: self.session.stop_all(), lambda _result: None, self.set_fault)
 
 class PowerMeterPanel(ttk.LabelFrame):
-    def __init__(self, master: tk.Misc, app: "WT5UbuntuAlphaApp") -> None:
+    def __init__(self, master: tk.Misc, app: "WT6App") -> None:
         super().__init__(master, text="B210", padding=8)
         self.app = app
         self.stop_event = threading.Event()
@@ -1847,7 +1847,7 @@ class PowerMeterPanel(ttk.LabelFrame):
             self.status_var.set(f"Logging {self.log_path.name if self.log_path else ''}".strip())
             return
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        self.log_path = Path(f"wt5_power_{timestamp}.csv")
+        self.log_path = Path(f"wt6_power_{timestamp}.csv")
         self.log_handle = self.log_path.open("w", newline="", encoding="utf-8")
         self.log_writer = csv.writer(self.log_handle)
         self.log_writer.writerow(self.log_header())
@@ -2116,7 +2116,7 @@ class PowerMeterPanel(ttk.LabelFrame):
 class RtlCalibrationDialog(tk.Toplevel):
     LEVELS_DBM = RTL_CAL_LEVELS_DBM
 
-    def __init__(self, app: "WT5UbuntuAlphaApp") -> None:
+    def __init__(self, app: "WT6App") -> None:
         super().__init__(app)
         self.app = app
         self.title("RTL Calibration")
@@ -2255,7 +2255,7 @@ class RtlCalibrationDialog(tk.Toplevel):
 
 
 class ScanCalibrationDialog(tk.Toplevel):
-    def __init__(self, app: "WT5UbuntuAlphaApp") -> None:
+    def __init__(self, app: "WT6App") -> None:
         super().__init__(app)
         self.app = app
         self.title("Scan Calibration")
@@ -2341,7 +2341,7 @@ class ScanCalibrationDialog(tk.Toplevel):
 class ScanGraphDialog(tk.Toplevel):
     def __init__(
         self,
-        app: "WT5UbuntuAlphaApp",
+        app: "WT6App",
         axis: Axis,
         rows: list[dict[str, object]],
         csv_path: Path,
@@ -2589,7 +2589,7 @@ class ScanGraphDialog(tk.Toplevel):
 
 
 class YFactorDialog(tk.Toplevel):
-    def __init__(self, app: "WT5UbuntuAlphaApp") -> None:
+    def __init__(self, app: "WT6App") -> None:
         super().__init__(app)
         self.app = app
         self.title("Y Factor")
@@ -2706,10 +2706,10 @@ class YFactorDialog(tk.Toplevel):
         self.destroy()
 
 
-class WT5UbuntuAlphaApp(tk.Tk):
+class WT6App(tk.Tk):
     def __init__(self, config_path: str) -> None:
         super().__init__()
-        self.title(f"WT5 Ubuntu Alpha Antenna Controller {APP_VERSION}")
+        self.title(f"WT6 Antenna Controller {APP_VERSION}")
         self.geometry("1100x670")
         self.minsize(1080, 645)
         self.config_path = config_path
@@ -2842,7 +2842,7 @@ class WT5UbuntuAlphaApp(tk.Tk):
         self.power_panel = PowerMeterPanel(body, self)
         self.power_panel.grid(row=1, column=0, columnspan=2, sticky="ew", padx=4, pady=(2, 0))
         if not self.configs:
-            self.status_var.set(f"No antennas found in {config_path}. Copy wt5_ubuntu.ini.example to wt5_ubuntu.ini.")
+            self.status_var.set(f"No antennas found in {config_path}. Copy wt6_ubuntu.ini.example to wt6_ubuntu.ini.")
 
         self.bind_all("<Button>", self.note_user_activity, add="+")
         self.bind_all("<Key>", self.note_user_activity, add="+")
@@ -3285,7 +3285,7 @@ class WT5UbuntuAlphaApp(tk.Tk):
         averaged_rows: list[dict[str, object]] = []
         scan_dir = Path(self.config_path).parent / "scan"
         scan_dir.mkdir(parents=True, exist_ok=True)
-        csv_path = scan_dir / f"wt5_scan_{config.antenna_name.lower()}_{axis_label(axis).lower()}_{datetime.now():%Y%m%d-%H%M%S}.csv"
+        csv_path = scan_dir / f"wt6_scan_{config.antenna_name.lower()}_{axis_label(axis).lower()}_{datetime.now():%Y%m%d-%H%M%S}.csv"
         try:
             offsets = self.scan_offsets(axis, config)
             total_points = len(offsets) * config.scan_count
@@ -3550,7 +3550,7 @@ class WT5UbuntuAlphaApp(tk.Tk):
         completed_unit = "dB"
         yfactor_dir = Path(self.config_path).parent / "yfactor"
         yfactor_dir.mkdir(parents=True, exist_ok=True)
-        log_path = yfactor_dir / f"wt5_yfactor_{antenna_name.lower()}_{datetime.now():%Y%m%d-%H%M%S}.csv"
+        log_path = yfactor_dir / f"wt6_yfactor_{antenna_name.lower()}_{datetime.now():%Y%m%d-%H%M%S}.csv"
         try:
             with log_path.open("w", newline="", encoding="utf-8") as handle:
                 fieldnames = [
@@ -4811,14 +4811,14 @@ class WT5UbuntuAlphaApp(tk.Tk):
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Launch WT5 Ubuntu Alpha two-antenna GUI.")
-    parser.add_argument("--config", default="wt5_ubuntu.ini", help="Config file. Default: wt5_ubuntu.ini")
+    parser = argparse.ArgumentParser(description="Launch WT6 two-antenna GUI.")
+    parser.add_argument("--config", default="wt6_ubuntu.ini", help="Config file. Default: wt6_ubuntu.ini")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    app = WT5UbuntuAlphaApp(args.config)
+    app = WT6App(args.config)
     try:
         app.mainloop()
     except KeyboardInterrupt:
@@ -4828,6 +4828,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 

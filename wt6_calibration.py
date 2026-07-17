@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Calibration maths for WT5 Ubuntu Alpha."""
+"""Calibration maths for WT6."""
 
 from __future__ import annotations
 
@@ -51,6 +51,7 @@ def weighted_peak_estimate(points: Iterable[tuple[float, float]]) -> GaussianFit
     sigma = math.sqrt(max(variance, 1.0e-6))
     amplitude = max(y for _x, y in corrected) - floor
     return GaussianFit(amplitude, center, sigma, baseline_at_zero, slope)
+
 
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RTL-SDR power-meter primitives for WT5 Ubuntu Alpha."""
+"""RTL-SDR power-meter primitives for WT6."""
 
 from __future__ import annotations
 
@@ -221,6 +221,7 @@ def _configure_librtlsdr_api(lib) -> None:
     lib.rtlsdr_read_sync.restype = ctypes.c_int
     lib.rtlsdr_cancel_async.argtypes = [dev_p]
     lib.rtlsdr_cancel_async.restype = ctypes.c_int
+
 
 
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Safety primitives for WT5 Ubuntu Alpha antenna control.
+"""Safety primitives for WT6 antenna control.
 
-The concrete drive guard logic currently lives in :mod:`wt5_antenna` so the
+The concrete drive guard logic currently lives in :mod:`wt6_antenna` so the
 hardware-facing code and the safety checks remain synchronized. This module is
-the public safety facade for new WT5 Ubuntu Alpha work.
+the public safety facade for new WT6 work.
 """
 
 from __future__ import annotations
 
-from wt5_antenna import (
+from wt6_antenna import (
     Axis,
     Direction,
     Position,
@@ -28,6 +28,7 @@ def validate_pointing(limits: SafetyLimits, azimuth: float, elevation: float) ->
 def azimuth_drive_error(limits: SafetyLimits, current_azimuth: float, target_azimuth: float) -> float:
     """Return the safe signed azimuth delta for the configured allowed arc."""
     return limits.azimuth_delta_to_target(current_azimuth, target_azimuth)
+
 
 
 

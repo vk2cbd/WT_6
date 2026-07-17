@@ -1,6 +1,6 @@
 import unittest
 
-from wt5_state import AppStateStore, AntennaRunState, PowerRunState, SystemRunState, antenna_state_from_text
+from wt6_state import AppStateStore, AntennaRunState, PowerRunState, SystemRunState, antenna_state_from_text
 
 
 class AppStateStoreTests(unittest.TestCase):
@@ -36,4 +36,5 @@ class AppStateStoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 

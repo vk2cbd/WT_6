@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Structured event logging for WT5 Ubuntu Alpha."""
+"""Structured event logging for WT6."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class EventLogger:
 
     def cleanup_old_logs(self) -> None:
         cutoff = time.time() - self.retention_days * 86400
-        for path in self.log_dir.glob("wt5_*.log"):
+        for path in self.log_dir.glob("wt6_*.log"):
             try:
                 if path.stat().st_mtime < cutoff:
                     path.unlink()
@@ -43,7 +43,7 @@ class EventLogger:
             "event": event,
             **fields,
         }
-        path = self.log_dir / f"wt5_{now:%Y-%m-%d}.log"
+        path = self.log_dir / f"wt6_{now:%Y-%m-%d}.log"
         with self.lock:
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, sort_keys=True, default=str) + "\n")
@@ -59,6 +59,7 @@ class EventLogger:
 
     def error(self, event: str, **fields: object) -> None:
         self.log("ERROR", event, **fields)
+
 
 
 

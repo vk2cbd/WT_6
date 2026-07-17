@@ -1,6 +1,6 @@
 import unittest
 
-from wt5_antenna import Direction, SafetyError, SafetyLimits
+from wt6_antenna import Direction, SafetyError, SafetyLimits
 
 
 class SafetyLimitTests(unittest.TestCase):
@@ -26,5 +26,6 @@ class SafetyLimitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configuration helpers for WT5 Ubuntu Alpha."""
+"""Configuration helpers for WT6."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Union
 
-from wt5_antenna import AntennaConfig, Calibration, SafetyLimits
+from wt6_antenna import AntennaConfig, Calibration, SafetyLimits
 
 
 @dataclass
@@ -481,6 +481,7 @@ def _default_sources() -> dict[str, SourceConfig]:
         "Centaurus A": SourceConfig("Centaurus A", ra_hours=13.4241, dec_degrees=-43.0191, flux_4800_mhz=650.0),
         "Orion A": SourceConfig("Orion A", ra_hours=5.5881, dec_degrees=-5.3911, flux_4800_mhz=400.0),
     }
+
 
 
 

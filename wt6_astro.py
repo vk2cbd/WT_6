@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Astronomical position helpers for WT5 Ubuntu Alpha."""
+"""Astronomical position helpers for WT6."""
 
 from __future__ import annotations
 
@@ -207,6 +207,7 @@ def _rad(value: float) -> float:
 
 def _deg(value: float) -> float:
     return math.degrees(value)
+
 
 
 
