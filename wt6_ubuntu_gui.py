@@ -1808,6 +1808,8 @@ class PowerMeterPanel(ttk.LabelFrame):
             warmup_seconds=max(0.0, float(self.warmup_var.get())),
             clock_source=self.clock_var.get().strip() or "internal",
             b210_device_args=self.app.power_config.b210_device_args,
+            east_channel=self.app.power_config.east_channel,
+            west_channel=self.app.power_config.west_channel,
         )
 
     def meter_config_from_fields(self) -> B210PowerMeterConfig:
@@ -1969,6 +1971,8 @@ class PowerMeterPanel(ttk.LabelFrame):
             gain_b=self.gain_b_var.get().strip(),
             update_rate_hz=power_config.update_rate_hz,
             clock=power_config.clock_source,
+            east_channel=power_config.east_channel,
+            west_channel=power_config.west_channel,
         )
 
     def stop(self) -> None:
@@ -2118,7 +2122,15 @@ class PowerMeterPanel(ttk.LabelFrame):
 
     def power_channel_for_antenna(self, antenna_name: str = "") -> str:
         normalized = (antenna_name or "").strip().lower()
+        power = getattr(getattr(self, "app", None), "power_config", None)
         if normalized == "west":
+            return self.normalize_power_channel(getattr(power, "west_channel", "B"))
+        return self.normalize_power_channel(getattr(power, "east_channel", "A"))
+
+    @staticmethod
+    def normalize_power_channel(value: str) -> str:
+        text = str(value or "").strip().upper().replace(" ", "")
+        if text in ("B", "1", "CHB", "CHANNELB"):
             return "B"
         return "A"
 
@@ -3592,6 +3604,7 @@ class WT6App(tk.Tk):
             antenna=antenna_name,
             hot=hot_target.name,
             cold=cold_target.name,
+            channel=self.power_panel.power_channel_for_antenna(antenna_name),
             count=count,
             dwell=dwell_seconds,
         )

@@ -54,6 +54,8 @@ class PowerConfig:
     warmup_seconds: float = 30.0
     clock_source: str = "internal"
     b210_device_args: str = "num_recv_frames=256"
+    east_channel: str = "A"
+    west_channel: str = "B"
 
 
 @dataclass
@@ -309,6 +311,8 @@ def load_power_config(path: Union[str, Path]) -> PowerConfig:
         warmup_seconds=parser.getfloat("power", "warmup_seconds", fallback=30.0),
         clock_source=parser.get("power", "clock_source", fallback="internal").strip() or "internal",
         b210_device_args=parser.get("power", "b210_device_args", fallback="num_recv_frames=256").strip(),
+        east_channel=normalize_power_channel(parser.get("power", "east_channel", fallback="A")),
+        west_channel=normalize_power_channel(parser.get("power", "west_channel", fallback="B")),
     )
 
 
@@ -330,9 +334,18 @@ def save_power_config(path: Union[str, Path], power: PowerConfig) -> None:
         "warmup_seconds": f"{power.warmup_seconds:.1f}",
         "clock_source": power.clock_source,
         "b210_device_args": power.b210_device_args,
+        "east_channel": normalize_power_channel(power.east_channel),
+        "west_channel": normalize_power_channel(power.west_channel),
     }
     with path.open("w", encoding="utf-8") as handle:
         parser.write(handle)
+
+
+def normalize_power_channel(value: str) -> str:
+    text = str(value or "").strip().upper().replace(" ", "")
+    if text in ("B", "1", "CHB", "CHANNELB"):
+        return "B"
+    return "A"
 
 
 def save_site_config(path: Union[str, Path], site: SiteConfig) -> None:

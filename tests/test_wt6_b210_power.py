@@ -40,13 +40,25 @@ class B210PowerConfigTests(unittest.TestCase):
 
 
 class B210PowerPanelRoutingTests(unittest.TestCase):
-    def test_west_antenna_uses_channel_b(self):
+    def test_default_west_antenna_uses_channel_b(self):
         from wt6_ubuntu_gui import PowerMeterPanel
 
         panel = PowerMeterPanel.__new__(PowerMeterPanel)
         self.assertEqual(panel.power_channel_for_antenna("East"), "A")
         self.assertEqual(panel.power_channel_for_antenna("West"), "B")
         self.assertEqual(panel.power_channel_for_antenna(""), "A")
+
+    def test_channel_mapping_can_be_changed_in_config(self):
+        from wt6_config import PowerConfig
+        from wt6_ubuntu_gui import PowerMeterPanel
+
+        class DummyApp:
+            power_config = PowerConfig(east_channel="B", west_channel="A")
+
+        panel = PowerMeterPanel.__new__(PowerMeterPanel)
+        panel.app = DummyApp()
+        self.assertEqual(panel.power_channel_for_antenna("East"), "B")
+        self.assertEqual(panel.power_channel_for_antenna("West"), "A")
 
 
 if __name__ == "__main__":
