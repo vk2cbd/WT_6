@@ -5,12 +5,15 @@ import unittest
 from wt6_config import (
     B210Calibration,
     ScanConfig,
+    YFactorConfig,
     load_b210_calibration,
     load_configs,
     load_scan_config,
     load_site_config,
+    load_yfactor_config,
     save_b210_calibration,
     save_scan_config,
+    save_yfactor_config,
 )
 
 
@@ -57,6 +60,32 @@ class ConfigEncodingTests(unittest.TestCase):
             scan = load_scan_config(path)
         self.assertFalse(scan.az_scan_high_to_low)
         self.assertEqual(scan.antenna_name, "West")
+
+
+    def test_yfactor_workflow_defaults_to_alternate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt6_ubuntu.ini"
+            path.write_text("[yfactor]\nantenna_name = East\n", encoding="utf-8")
+            yfactor = load_yfactor_config(path)
+        self.assertTrue(yfactor.alternate_order)
+
+    def test_yfactor_workflow_save_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt6_ubuntu.ini"
+            save_yfactor_config(
+                path,
+                YFactorConfig(
+                    antenna_name="West",
+                    hot_target="Moon",
+                    cold_mode="Moon AZ / EL 80",
+                    count=4,
+                    dwell_seconds=2.0,
+                    alternate_order=False,
+                ),
+            )
+            yfactor = load_yfactor_config(path)
+        self.assertFalse(yfactor.alternate_order)
+        self.assertEqual(yfactor.antenna_name, "West")
 
     def test_b210_calibration_save_load_is_per_channel(self):
         with tempfile.TemporaryDirectory() as tmp:

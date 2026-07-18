@@ -57,6 +57,7 @@ cold_ra = 0.000000
 cold_dec = 0.000
 count = 3
 dwell_seconds = 5.000
+alternate_order = yes
 
 [antenna:East]
 port = /dev/ttyUSB0

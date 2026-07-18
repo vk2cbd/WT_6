@@ -1437,12 +1437,12 @@ class AntennaPanel(ttk.Frame):
         content = ttk.Frame(self)
         content.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         content.columnconfigure(0, weight=0)
-        content.columnconfigure(1, weight=0, minsize=82)
-        content.columnconfigure(2, weight=0, minsize=50)
-        content.columnconfigure(3, weight=0, minsize=58)
-        content.columnconfigure(4, weight=0, minsize=48)
-        content.columnconfigure(5, weight=0, minsize=72)
-        content.columnconfigure(6, weight=1, minsize=6)
+        content.columnconfigure(1, weight=0, minsize=70)
+        content.columnconfigure(2, weight=0, minsize=46)
+        content.columnconfigure(3, weight=0, minsize=54)
+        content.columnconfigure(4, weight=0, minsize=44)
+        content.columnconfigure(5, weight=0, minsize=56)
+        content.columnconfigure(6, weight=1, minsize=4)
         content.columnconfigure(7, weight=0)
         position_font = ("TkDefaultFont", 15, "bold")
 
@@ -1451,22 +1451,22 @@ class AntennaPanel(ttk.Frame):
         ttk.Label(content, text="AZ err").grid(row=0, column=2, sticky="w")
         ttk.Label(content, textvariable=self.az_error_var, width=7, anchor="w").grid(row=0, column=3, sticky="w", padx=(2, 10))
         ttk.Label(content, text="Limits").grid(row=0, column=4, sticky="w")
-        ttk.Label(content, textvariable=self.limits_var, width=7, anchor="w").grid(row=0, column=5, sticky="w", padx=(8, 0))
+        ttk.Label(content, textvariable=self.limits_var, width=6, anchor="w").grid(row=0, column=5, sticky="w", padx=(6, 0))
 
         ttk.Label(content, text="EL").grid(row=1, column=0, sticky="w", padx=(0, 6))
         ttk.Label(content, textvariable=self.cal_el_var, font=position_font, width=6, anchor="e").grid(row=1, column=1, sticky="w", padx=(0, 8))
         ttk.Label(content, text="EL err").grid(row=1, column=2, sticky="w")
         ttk.Label(content, textvariable=self.el_error_var, width=7, anchor="w").grid(row=1, column=3, sticky="w", padx=(2, 10))
         ttk.Label(content, text="Mode").grid(row=1, column=4, sticky="w")
-        ttk.Label(content, textvariable=self.mode_var, width=8, anchor="w").grid(row=1, column=5, sticky="w", padx=(8, 0))
+        ttk.Label(content, textvariable=self.mode_var, width=7, anchor="w").grid(row=1, column=5, sticky="w", padx=(6, 0))
 
         ttk.Label(content, text="Target").grid(row=2, column=2, sticky="w")
-        ttk.Label(content, textvariable=self.target_var, width=16, anchor="w").grid(row=2, column=3, columnspan=3, sticky="w", padx=(2, 0))
+        ttk.Label(content, textvariable=self.target_var, width=15, anchor="w").grid(row=2, column=3, columnspan=3, sticky="w", padx=(2, 0))
 
         manual = ttk.Frame(content)
-        manual.grid(row=0, column=7, rowspan=3, sticky="e", padx=(8, 0))
+        manual.grid(row=0, column=7, rowspan=3, sticky="e", padx=(6, 0))
         for col in range(3):
-            manual.columnconfigure(col, minsize=64)
+            manual.columnconfigure(col, minsize=58)
         for row in range(3):
             manual.rowconfigure(row, minsize=30)
         self._hold_button(manual, "EL+", Direction.EL_UP).grid(row=0, column=1, sticky="ew", padx=2, pady=2)
@@ -2553,7 +2553,6 @@ class ScanCalibrationDialog(tk.Toplevel):
         self.title("Scan Calibration")
         self.resizable(False, False)
         self.transient(app)
-        self.grab_set()
         self.status_var = tk.StringVar(value="Track a source and start B210 power before scanning.")
         antenna_names = list(app.configs) or list(app.panels)
         default_antenna = app.scan_config.antenna_name if app.scan_config.antenna_name in antenna_names else ""
@@ -2900,6 +2899,7 @@ class YFactorDialog(tk.Toplevel):
         self.cold_dec_var = tk.StringVar(value=f"{config.cold_dec:0.1f}")
         self.count_var = tk.StringVar(value=str(config.count))
         self.dwell_var = tk.StringVar(value=f"{config.dwell_seconds:0.1f}")
+        self.workflow_var = tk.StringVar(value="Alternate H/C" if config.alternate_order else "Repeat H/C")
         self.status_var = tk.StringVar(value="Start B210 power before measuring.")
 
         body = ttk.Frame(self, padding=10)
@@ -2926,8 +2926,16 @@ class YFactorDialog(tk.Toplevel):
         self._entry(body, "Cold Dec", self.cold_dec_var, 6)
         self._entry(body, "Measurements", self.count_var, 7)
         self._entry(body, "Dwell sec", self.dwell_var, 8)
+        ttk.Label(body, text="Workflow").grid(row=9, column=0, sticky="w", pady=2)
+        ttk.Combobox(
+            body,
+            textvariable=self.workflow_var,
+            values=("Alternate H/C", "Repeat H/C"),
+            width=16,
+            state="readonly",
+        ).grid(row=9, column=1, sticky="w", pady=2)
         ttk.Label(body, textvariable=self.status_var, foreground="red", wraplength=360).grid(
-            row=9, column=0, columnspan=2, sticky="ew", pady=(8, 0)
+            row=10, column=0, columnspan=2, sticky="ew", pady=(8, 0)
         )
 
         buttons = ttk.Frame(self, padding=(10, 0, 10, 10))
@@ -2973,6 +2981,7 @@ class YFactorDialog(tk.Toplevel):
             cold_dec=cold_dec,
             count=count,
             dwell_seconds=dwell,
+            alternate_order=self.workflow_var.get() == "Alternate H/C",
         )
         save_yfactor_config(self.app.config_path, self.app.yfactor_config)
         self.app.start_yfactor(
@@ -2986,6 +2995,7 @@ class YFactorDialog(tk.Toplevel):
             cold_dec=cold_dec,
             count=count,
             dwell_seconds=dwell,
+            alternate_order=self.workflow_var.get() == "Alternate H/C",
         )
 
     def set_status(self, text: str) -> None:
@@ -3002,7 +3012,7 @@ class WT6App(tk.Tk):
     def __init__(self, config_path: str) -> None:
         super().__init__()
         self.title(f"WT6 Antenna Controller {APP_VERSION}")
-        self.geometry("1080x650")
+        self.geometry("1120x650")
         self.minsize(1080, 650)
         self.config_path = config_path
         self.configs = load_configs(config_path)
@@ -3633,10 +3643,6 @@ class WT6App(tk.Tk):
             averaged_rows = self.average_scan_rows(rows, offsets)
             if not stopped:
                 self.write_scan_csv(csv_path, rows, averaged_rows)
-            self.set_scan_offset(None)
-            if self.tracking_kind and not self.tracking_stop_event.is_set():
-                target = self.current_tracking_target(self.tracking_kind)
-                self.slew_all_to_target(target, target.name[:8].upper(), show_slewing=False)
             if stopped:
                 self.event_log.info("SCAN_STOPPED", antenna=config.antenna_name, axis=axis_label(axis))
                 self.events.put(("ok", dialog.set_status, "Scan stopped; tracking source."))
@@ -3648,6 +3654,10 @@ class WT6App(tk.Tk):
                 self.events.put(("ok", self.set_status, f"Scan complete: {csv_path}"))
             else:
                 self.events.put(("ok", dialog.set_status, "Scan stopped before measurements were taken."))
+            self.set_scan_offset(None)
+            if self.tracking_kind and not self.tracking_stop_event.is_set():
+                target = self.current_tracking_target(self.tracking_kind)
+                self.slew_all_to_target(target, target.name[:8].upper(), show_slewing=False)
         except Exception as exc:
             self.scan_stop_event.set()
             self.set_scan_offset(None)
@@ -3759,6 +3769,7 @@ class WT6App(tk.Tk):
         cold_dec: float,
         count: int,
         dwell_seconds: float,
+        alternate_order: bool,
     ) -> None:
         if self.yfactor_thread and self.yfactor_thread.is_alive():
             dialog.set_status("Y Factor measurement already running.")
@@ -3819,9 +3830,10 @@ class WT6App(tk.Tk):
             channel=self.power_panel.power_channel_for_antenna(antenna_name),
             count=count,
             dwell=dwell_seconds,
+            workflow="alternate" if alternate_order else "repeat",
         )
         self.yfactor_thread = threading.Thread(
-            target=lambda: self.yfactor_worker(dialog, antenna_name, target_label, cold_mode, cold_az, cold_el, cold_ra, cold_dec, count, dwell_seconds),
+            target=lambda: self.yfactor_worker(dialog, antenna_name, target_label, cold_mode, cold_az, cold_el, cold_ra, cold_dec, count, dwell_seconds, alternate_order),
             daemon=True,
         )
         self.yfactor_thread.start()
@@ -3850,6 +3862,7 @@ class WT6App(tk.Tk):
         cold_dec: float,
         count: int,
         dwell_seconds: float,
+        alternate_order: bool,
     ) -> None:
         rows: list[dict[str, float]] = []
         completed_unit = "dB"
@@ -3915,22 +3928,34 @@ class WT6App(tk.Tk):
                         )
                         hot_target = hot_provider()
                         cold_target = cold_provider()
-                        self.events.put(("ok", dialog.set_status, f"Measurement {index}/{count}: hot {hot_target.name}."))
-                        self.events.put(("ok", self.apply_yfactor_target_position, target_label))
-                        self.yfactor_slew_selected(antenna_name, selected, selected_panel, hot_provider, "HOT")
-                        hot = self.collect_power_average(dwell_seconds, self.yfactor_stop_event, selected, selected_panel, target_label, antenna_name)
+                        phase_order = ("hot", "cold")
+                        if alternate_order and index % 2 == 0:
+                            phase_order = ("cold", "hot")
+                        hot: Optional[dict[str, object]] = None
+                        cold: Optional[dict[str, object]] = None
+                        for phase in phase_order:
+                            if self.yfactor_stop_event.is_set():
+                                break
+                            if phase == "hot":
+                                self.events.put(("ok", dialog.set_status, f"Measurement {index}/{count}: hot {hot_target.name}."))
+                                self.events.put(("ok", self.apply_yfactor_target_position, target_label))
+                                self.yfactor_slew_selected(antenna_name, selected, selected_panel, hot_provider, "HOT")
+                                hot = self.collect_power_average(dwell_seconds, self.yfactor_stop_event, selected, selected_panel, target_label, antenna_name)
+                                if hot:
+                                    completed_unit = str(hot["power_unit"])
+                                    hot_target = hot_provider()
+                            else:
+                                self.events.put(("ok", dialog.set_status, f"Measurement {index}/{count}: cold sky."))
+                                self.events.put(("ok", self.apply_yfactor_target_position, target_label))
+                                self.yfactor_slew_selected(antenna_name, selected, selected_panel, cold_provider, "COLD")
+                                cold = self.collect_power_average(dwell_seconds, self.yfactor_stop_event, selected, selected_panel, target_label, antenna_name)
+                                if cold:
+                                    cold_target = cold_provider()
                         if self.yfactor_stop_event.is_set():
                             break
-                        completed_unit = str(hot["power_unit"])
-                        hot_target = hot_provider()
-                        self.events.put(("ok", dialog.set_status, f"Measurement {index}/{count}: cold sky."))
-                        self.events.put(("ok", self.apply_yfactor_target_position, target_label))
-                        self.yfactor_slew_selected(antenna_name, selected, selected_panel, cold_provider, "COLD")
-                        cold = self.collect_power_average(dwell_seconds, self.yfactor_stop_event, selected, selected_panel, target_label, antenna_name)
-                        if self.yfactor_stop_event.is_set():
-                            break
-                        cold_target = cold_provider()
-                        y_db = hot["power_value"] - cold["power_value"]
+                        if hot is None or cold is None:
+                            raise RuntimeError("Y Factor measurement did not complete both hot and cold samples.")
+                        y_db = float(hot["power_value"]) - float(cold["power_value"])
                         y_ratio = 10 ** (y_db / 10.0)
                         rows.append(
                             {

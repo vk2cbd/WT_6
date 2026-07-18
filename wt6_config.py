@@ -79,6 +79,7 @@ class YFactorConfig:
     cold_dec: float = 0.0
     count: int = 3
     dwell_seconds: float = 5.0
+    alternate_order: bool = True
 
 
 @dataclass
@@ -365,6 +366,7 @@ def load_yfactor_config(path: Union[str, Path]) -> YFactorConfig:
         cold_dec=parser.getfloat("yfactor", "cold_dec", fallback=0.0),
         count=parser.getint("yfactor", "count", fallback=3),
         dwell_seconds=parser.getfloat("yfactor", "dwell_seconds", fallback=5.0),
+        alternate_order=parser.getboolean("yfactor", "alternate_order", fallback=True),
     )
 
 
@@ -383,6 +385,7 @@ def save_yfactor_config(path: Union[str, Path], config: YFactorConfig) -> None:
         "cold_dec": f"{config.cold_dec:.3f}",
         "count": str(max(1, int(config.count))),
         "dwell_seconds": f"{config.dwell_seconds:.3f}",
+        "alternate_order": "yes" if config.alternate_order else "no",
     }
     with path.open("w", encoding="utf-8") as handle:
         parser.write(handle)
