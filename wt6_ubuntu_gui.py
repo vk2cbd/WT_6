@@ -1433,20 +1433,21 @@ class AntennaPanel(ttk.Frame):
         content = ttk.Frame(self)
         content.grid(row=1, column=0, sticky="ew", pady=(8, 0))
         content.columnconfigure(0, weight=0)
-        content.columnconfigure(1, weight=1)
+        content.columnconfigure(1, weight=0, minsize=78)
         content.columnconfigure(2, weight=1)
         content.columnconfigure(3, weight=0)
         content.columnconfigure(4, weight=0)
+        position_font = ("TkDefaultFont", 15, "bold")
 
         ttk.Label(content, text="AZ").grid(row=0, column=0, sticky="w", padx=(0, 6))
-        ttk.Label(content, textvariable=self.cal_az_var, font=("TkDefaultFont", 17, "bold")).grid(row=0, column=1, sticky="w", padx=(0, 12))
+        ttk.Label(content, textvariable=self.cal_az_var, font=position_font, width=6, anchor="e").grid(row=0, column=1, sticky="w", padx=(0, 8))
         ttk.Label(content, text="AZ err").grid(row=0, column=2, sticky="w")
         ttk.Label(content, textvariable=self.az_error_var).grid(row=0, column=2, sticky="w", padx=(52, 0))
         ttk.Label(content, text="Limits").grid(row=0, column=3, sticky="w", padx=(14, 4))
         ttk.Label(content, textvariable=self.limits_var).grid(row=0, column=3, sticky="w", padx=(62, 0))
 
         ttk.Label(content, text="EL").grid(row=1, column=0, sticky="w", padx=(0, 6))
-        ttk.Label(content, textvariable=self.cal_el_var, font=("TkDefaultFont", 17, "bold")).grid(row=1, column=1, sticky="w", padx=(0, 12))
+        ttk.Label(content, textvariable=self.cal_el_var, font=position_font, width=6, anchor="e").grid(row=1, column=1, sticky="w", padx=(0, 8))
         ttk.Label(content, text="EL err").grid(row=1, column=2, sticky="w")
         ttk.Label(content, textvariable=self.el_error_var).grid(row=1, column=2, sticky="w", padx=(52, 0))
         ttk.Label(content, text="Mode").grid(row=1, column=3, sticky="w", padx=(14, 4))
@@ -1677,9 +1678,9 @@ class AntennaPanel(ttk.Frame):
         if self.session:
             self.app.run_worker(lambda: self.session.stop_all(), lambda _result: None, self.set_fault)
 
-class PowerMeterPanel(ttk.LabelFrame):
+class PowerMeterPanel(ttk.Frame):
     def __init__(self, master: tk.Misc, app: "WT6App") -> None:
-        super().__init__(master, text="B210", padding=8)
+        super().__init__(master, padding=8, relief="solid", borderwidth=1)
         self.app = app
         self.stop_event = threading.Event()
         self.thread: Optional[threading.Thread] = None
