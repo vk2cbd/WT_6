@@ -1743,11 +1743,14 @@ class PowerMeterPanel(ttk.LabelFrame):
         self._entry(fields, "Clock", self.clock_var, 6, width=8)
         self._entry(fields, "Avg", self.smooth_var, 8, width=4)
         self._entry(fields, "GUI Hz", self.update_var, 10, width=5)
-        ttk.Button(fields, text="SDR Power On", command=self.start).grid(row=0, column=13, sticky="e", padx=(16, 0))
-        ttk.Button(fields, text="Release SDR", command=self.stop).grid(row=0, column=14, sticky="e", padx=(6, 0))
-        ttk.Button(fields, text="Cal", command=self.show_b210_calibration_pending).grid(row=0, column=15, sticky="e", padx=(6, 0))
-        ttk.Button(fields, text="Start Log", command=self.start_log).grid(row=0, column=16, sticky="e", padx=(14, 0))
-        ttk.Button(fields, text="Stop Log", command=self.stop_log).grid(row=0, column=17, sticky="e", padx=(6, 0))
+
+        actions = ttk.Frame(fields)
+        actions.grid(row=1, column=0, columnspan=13, sticky="w", pady=(6, 0))
+        ttk.Button(actions, text="SDR Power On", command=self.start).pack(side="left")
+        ttk.Button(actions, text="Release SDR", command=self.stop).pack(side="left", padx=(6, 0))
+        ttk.Button(actions, text="Cal", command=self.show_b210_calibration_pending).pack(side="left", padx=(6, 0))
+        ttk.Button(actions, text="Start Log", command=self.start_log).pack(side="left", padx=(14, 0))
+        ttk.Button(actions, text="Stop Log", command=self.stop_log).pack(side="left", padx=(6, 0))
 
     def _channel_panel(
         self,
@@ -2791,8 +2794,8 @@ class WT6App(tk.Tk):
     def __init__(self, config_path: str) -> None:
         super().__init__()
         self.title(f"WT6 Antenna Controller {APP_VERSION}")
-        self.geometry("1100x670")
-        self.minsize(1080, 645)
+        self.geometry("1080x650")
+        self.minsize(1080, 650)
         self.config_path = config_path
         self.configs = load_configs(config_path)
         self.site = load_site_config(config_path)
