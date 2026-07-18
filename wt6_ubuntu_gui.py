@@ -4318,11 +4318,16 @@ class WT6App(tk.Tk):
                 force_low_to_high=force_live_low_to_high,
             )
             current_effective_target = {"target": effective_target}
+            current_activity = {"activity": activity}
 
             def progress(position: Position) -> None:
                 self.events.put(("position", panel.update_position, position))
                 display_target = current_effective_target["target"]
-                session.update_oled_position(display_target.azimuth, display_target.elevation, activity)
+                session.update_oled_position(
+                    display_target.azimuth,
+                    display_target.elevation,
+                    current_activity["activity"],
+                )
 
             def live_tracking_target(position: Position) -> tuple[float, float]:
                 if not self.tracking_active or not self.tracking_kind:
@@ -4377,6 +4382,15 @@ class WT6App(tk.Tk):
                     )
                     mark_primary_slew_done()
                     primary_slew_done = True
+                    tracking_activity = self.oled_activity_for_antenna(name, "TRACKING")
+                    current_activity["activity"] = tracking_activity
+                    session.update_oled(
+                        mode,
+                        current_effective_target["target"].azimuth,
+                        current_effective_target["target"].elevation,
+                        tracking_activity,
+                    )
+                    self.events.put(("ok", panel.set_tracking_status, tracking_activity))
                     while (
                         live_tracking_target
                         and other_primary_slews_active()
