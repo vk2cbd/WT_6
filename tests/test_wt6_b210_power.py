@@ -39,5 +39,15 @@ class B210PowerConfigTests(unittest.TestCase):
         self.assertEqual(calls[2], ("activateStream", "rx", 123, 100_005_000))
 
 
+class B210PowerPanelRoutingTests(unittest.TestCase):
+    def test_west_antenna_uses_channel_b(self):
+        from wt6_ubuntu_gui import PowerMeterPanel
+
+        panel = PowerMeterPanel.__new__(PowerMeterPanel)
+        self.assertEqual(panel.power_channel_for_antenna("East"), "A")
+        self.assertEqual(panel.power_channel_for_antenna("West"), "B")
+        self.assertEqual(panel.power_channel_for_antenna(""), "A")
+
+
 if __name__ == "__main__":
     unittest.main()

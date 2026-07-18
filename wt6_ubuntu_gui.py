@@ -1827,6 +1827,7 @@ class PowerMeterPanel(ttk.LabelFrame):
             samples_per_read=samples,
             clock_source=power.clock_source,
             device_args=power.b210_device_args,
+            read_timeout_ms=max(100, min(1000, int(round(2000.0 / max(power.update_rate_hz, 0.1))))),
         )
         config.validate()
         return config
@@ -1964,9 +1965,6 @@ class PowerMeterPanel(ttk.LabelFrame):
     def stop(self) -> None:
         self.stop_event.set()
         if self.thread and self.thread.is_alive():
-            meter = self.meter
-            if meter:
-                meter.cancel()
             self.status_var.set("Releasing SDR...")
         else:
             self.thread = None
@@ -1975,6 +1973,11 @@ class PowerMeterPanel(ttk.LabelFrame):
             self.owner_var.set("SDR released for other apps")
             self.app.state_store.reset_power("SDR RELEASED")
         self.app.event_log.info("B210_POWER_UI_STOP")
+
+    def wait_for_stop(self, timeout: float = 2.0) -> None:
+        thread = self.thread
+        if thread and thread.is_alive():
+            thread.join(timeout=timeout)
 
     def power_loop(self, config: B210PowerMeterConfig) -> None:
         try:
@@ -2071,10 +2074,32 @@ class PowerMeterPanel(ttk.LabelFrame):
             "power_extrapolated": False,
         }
 
-    def current_power_measurement(self) -> Optional[dict[str, object]]:
-        if self.latest_power_dbfs is None or self.is_warming():
+    def current_power_measurement(self, antenna_name: str = "") -> Optional[dict[str, object]]:
+        if self.is_warming():
             return None
-        return self.display_measurement(self.latest_power_dbfs)
+        channel = self.power_channel_for_antenna(antenna_name)
+        if channel == "B":
+            if self.latest_power_b_dbfs is None:
+                return None
+            return {
+                "power_dbfs": self.latest_power_b_dbfs,
+                "power_value": self.latest_power_b_dbfs,
+                "power_unit": "dBFS",
+                "power_calibrated": False,
+                "power_extrapolated": False,
+                "power_channel": "B",
+            }
+        if self.latest_power_dbfs is None:
+            return None
+        measurement = self.display_measurement(self.latest_power_dbfs)
+        measurement["power_channel"] = "A"
+        return measurement
+
+    def power_channel_for_antenna(self, antenna_name: str = "") -> str:
+        normalized = (antenna_name or "").strip().lower()
+        if normalized == "west":
+            return "B"
+        return "A"
 
     def is_warming(self) -> bool:
         if not self.power_started_at:
@@ -3245,13 +3270,14 @@ class WT6App(tk.Tk):
         if not self.sessions:
             dialog.set_status("Connect antennas before scanning.")
             return
-        if self.power_panel.latest_power_dbfs is None:
-            dialog.set_status("Start B210 power and wait for readings before scanning.")
-            return
         try:
             self.validate_scan_config(config)
         except RuntimeError as exc:
             dialog.set_status(str(exc))
+            return
+        if self.power_panel.current_power_measurement(config.antenna_name) is None:
+            channel = self.power_panel.power_channel_for_antenna(config.antenna_name)
+            dialog.set_status(f"Start B210 power and wait for CH {channel} readings before scanning.")
             return
         self.scan_config = config
         save_scan_config(self.config_path, config)
@@ -3393,7 +3419,7 @@ class WT6App(tk.Tk):
         measurements: list[dict[str, object]] = []
         end_time = time.monotonic() + dwell_seconds
         while not self.scan_stop_event.is_set() and time.monotonic() < end_time:
-            measurement = self.power_panel.current_power_measurement()
+            measurement = self.power_panel.current_power_measurement(antenna_name)
             if measurement is not None:
                 measurements.append(measurement)
             time.sleep(0.1)
@@ -3421,6 +3447,7 @@ class WT6App(tk.Tk):
                 else None
             ),
             "power_unit": power_unit,
+            "power_channel": str(measurements[-1].get("power_channel", "")) if measurements else "",
             "power_calibrated": calibrated,
             "power_extrapolated": any(bool(measurement["power_extrapolated"]) for measurement in measurements),
             "sample_count": len(measurements),
@@ -3491,7 +3518,7 @@ class WT6App(tk.Tk):
         if antenna_name not in self.sessions:
             dialog.set_status("Connect and select an antenna before Y Factor measurement.")
             return
-        if self.power_panel.current_power_measurement() is None:
+        if self.power_panel.current_power_measurement(antenna_name) is None:
             dialog.set_status("Start B210 power and wait for readings before Y Factor measurement.")
             return
         if not (1 <= count <= 50):
@@ -3589,6 +3616,8 @@ class WT6App(tk.Tk):
                     "hot_power",
                     "cold_power",
                     "power_unit",
+                    "hot_channel",
+                    "cold_channel",
                     "hot_dbfs",
                     "cold_dbfs",
                     "hot_samples",
@@ -3632,7 +3661,7 @@ class WT6App(tk.Tk):
                         self.events.put(("ok", dialog.set_status, f"Measurement {index}/{count}: hot {hot_target.name}."))
                         self.events.put(("ok", self.apply_yfactor_target_position, target_label))
                         self.yfactor_slew_selected(antenna_name, selected, selected_panel, hot_provider, "HOT")
-                        hot = self.collect_power_average(dwell_seconds, self.yfactor_stop_event, selected, selected_panel, target_label)
+                        hot = self.collect_power_average(dwell_seconds, self.yfactor_stop_event, selected, selected_panel, target_label, antenna_name)
                         if self.yfactor_stop_event.is_set():
                             break
                         completed_unit = str(hot["power_unit"])
@@ -3640,7 +3669,7 @@ class WT6App(tk.Tk):
                         self.events.put(("ok", dialog.set_status, f"Measurement {index}/{count}: cold sky."))
                         self.events.put(("ok", self.apply_yfactor_target_position, target_label))
                         self.yfactor_slew_selected(antenna_name, selected, selected_panel, cold_provider, "COLD")
-                        cold = self.collect_power_average(dwell_seconds, self.yfactor_stop_event, selected, selected_panel, target_label)
+                        cold = self.collect_power_average(dwell_seconds, self.yfactor_stop_event, selected, selected_panel, target_label, antenna_name)
                         if self.yfactor_stop_event.is_set():
                             break
                         cold_target = cold_provider()
@@ -3672,6 +3701,8 @@ class WT6App(tk.Tk):
                                 "hot_power": f"{float(hot['power_value']):0.3f}",
                                 "cold_power": f"{float(cold['power_value']):0.3f}",
                                 "power_unit": hot["power_unit"],
+                                "hot_channel": hot.get("power_channel", ""),
+                                "cold_channel": cold.get("power_channel", ""),
                                 "hot_dbfs": f"{float(hot['power_dbfs']):0.3f}",
                                 "cold_dbfs": f"{float(cold['power_dbfs']):0.3f}",
                                 "hot_samples": int(hot["sample_count"]),
@@ -3813,12 +3844,13 @@ class WT6App(tk.Tk):
         session: Optional[SafeAntenna] = None,
         panel: Optional[AntennaPanel] = None,
         target_label: str = "",
+        antenna_name: str = "",
     ) -> dict[str, object]:
         measurements: list[dict[str, object]] = []
         end_time = time.monotonic() + dwell_seconds
         next_position_update = 0.0
         while not stop_event.is_set() and time.monotonic() < end_time:
-            measurement = self.power_panel.current_power_measurement()
+            measurement = self.power_panel.current_power_measurement(antenna_name)
             if measurement is not None:
                 measurements.append(measurement)
             if session and panel and time.monotonic() >= next_position_update:
@@ -3838,6 +3870,7 @@ class WT6App(tk.Tk):
             "power_value": sum(float(row["power_value"]) for row in measurements) / len(measurements),
             "power_dbfs": sum(float(row["power_dbfs"]) for row in measurements) / len(measurements),
             "power_unit": str(measurements[-1]["power_unit"]),
+            "power_channel": str(measurements[-1].get("power_channel", "")),
             "power_calibrated": all(bool(row.get("power_calibrated")) for row in measurements),
             "power_extrapolated": any(bool(row.get("power_extrapolated")) for row in measurements),
             "sample_count": len(measurements),
@@ -4822,6 +4855,7 @@ class WT6App(tk.Tk):
             self.power_panel.save_settings()
             self.power_panel.stop_log()
             self.power_panel.stop()
+            self.power_panel.wait_for_stop()
             self.stop_scan()
             self.stop_yfactor()
             self.stop_all()
