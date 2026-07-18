@@ -3012,7 +3012,7 @@ class WT6App(tk.Tk):
     def __init__(self, config_path: str) -> None:
         super().__init__()
         self.title(f"WT6 Antenna Controller {APP_VERSION}")
-        self.geometry("1120x650")
+        self.geometry("1192x697")
         self.minsize(1080, 650)
         self.config_path = config_path
         self.configs = load_configs(config_path)
