@@ -1727,6 +1727,8 @@ class PowerMeterPanel(ttk.Frame):
         self.power_var = tk.StringVar(value="--.- dBFS")
         self.power_b_var = tk.StringVar(value="--.- dBFS")
         self.status_var = tk.StringVar(value="SDR RELEASED")
+        self.status_display_var = tk.StringVar(value="SDR RELEASED")
+        self.status_var.trace_add("write", lambda *_args: self.refresh_status_display())
         self.log_status_var = tk.StringVar(value="Log stopped")
         self.stats_var = tk.StringVar(value="Avg -- Min -- Max --")
         self.stats_b_var = tk.StringVar(value="Avg -- Min -- Max --")
@@ -1734,8 +1736,6 @@ class PowerMeterPanel(ttk.Frame):
 
         self.columnconfigure(1, weight=1)
         ttk.Label(self, text="B210", font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="nw", padx=(0, 12))
-        ttk.Label(self, textvariable=self.status_var).grid(row=1, column=0, sticky="nw", padx=(0, 12))
-        ttk.Label(self, textvariable=self.log_status_var).grid(row=2, column=0, sticky="nw", padx=(0, 12), pady=(3, 0))
 
         channels = ttk.Frame(self)
         channels.grid(row=0, column=1, sticky="ew")
@@ -1743,6 +1743,13 @@ class PowerMeterPanel(ttk.Frame):
         channels.columnconfigure(1, weight=1)
         self._channel_panel(channels, 0, "CH A", self.power_var, self.gain_var, self.stats_var)
         self._channel_panel(channels, 1, "CH B", self.power_b_var, self.gain_b_var, self.stats_b_var)
+
+        status_line = ttk.Frame(channels)
+        status_line.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5, 0))
+        status_line.columnconfigure(0, weight=1)
+        status_line.columnconfigure(1, weight=1)
+        ttk.Label(status_line, textvariable=self.status_display_var, wraplength=360, justify="left").grid(row=0, column=0, sticky="w")
+        ttk.Label(status_line, textvariable=self.log_status_var, wraplength=360, justify="left").grid(row=0, column=1, sticky="w", padx=(18, 0))
 
         fields = ttk.Frame(self)
         fields.grid(row=1, column=1, sticky="ew", pady=(6, 0))
@@ -1761,6 +1768,13 @@ class PowerMeterPanel(ttk.Frame):
         ttk.Button(actions, text="Cal", command=self.app.open_b210_calibration).pack(side="left", padx=(6, 0))
         ttk.Button(actions, text="Start Log", command=self.start_log).pack(side="left", padx=(14, 0))
         ttk.Button(actions, text="Stop Log", command=self.stop_log).pack(side="left", padx=(6, 0))
+
+
+    def refresh_status_display(self) -> None:
+        text = self.status_var.get()
+        if len(text) > 96:
+            text = text[:93].rstrip() + "..."
+        self.status_display_var.set(text)
 
     def _channel_panel(
         self,
