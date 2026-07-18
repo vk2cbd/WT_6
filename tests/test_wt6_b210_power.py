@@ -60,6 +60,27 @@ class B210PowerPanelRoutingTests(unittest.TestCase):
         self.assertEqual(panel.power_channel_for_antenna("East"), "B")
         self.assertEqual(panel.power_channel_for_antenna("West"), "A")
 
+    def test_west_measurement_uses_channel_b_calibration(self):
+        from wt6_config import B210Calibration, PowerConfig
+        from wt6_ubuntu_gui import PowerMeterPanel
+
+        class DummyApp:
+            power_config = PowerConfig()
+
+        panel = PowerMeterPanel.__new__(PowerMeterPanel)
+        panel.app = DummyApp()
+        panel.power_started_at = 0.0
+        panel.latest_power_dbfs = -30.0
+        panel.latest_power_b_dbfs = -25.0
+        panel.active_calibrations = {
+            "A": B210Calibration(1, 1, 1, "55", "55", "A", {-40: -20.0, -50: -30.0}),
+            "B": B210Calibration(1, 1, 1, "55", "55", "B", {-40: -15.0, -50: -25.0}),
+        }
+        measurement = panel.current_power_measurement("West")
+        self.assertEqual(measurement["power_channel"], "B")
+        self.assertEqual(measurement["power_unit"], "dBm")
+        self.assertAlmostEqual(measurement["power_value"], -50.0)
+
 
 if __name__ == "__main__":
     unittest.main()

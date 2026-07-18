@@ -2,7 +2,16 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from wt6_config import ScanConfig, load_configs, load_scan_config, load_site_config, save_scan_config
+from wt6_config import (
+    B210Calibration,
+    ScanConfig,
+    load_b210_calibration,
+    load_configs,
+    load_scan_config,
+    load_site_config,
+    save_b210_calibration,
+    save_scan_config,
+)
 
 
 class ConfigEncodingTests(unittest.TestCase):
@@ -48,6 +57,22 @@ class ConfigEncodingTests(unittest.TestCase):
             scan = load_scan_config(path)
         self.assertFalse(scan.az_scan_high_to_low)
         self.assertEqual(scan.antenna_name, "West")
+
+    def test_b210_calibration_save_load_is_per_channel(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt6_ubuntu.ini"
+            save_b210_calibration(
+                path,
+                B210Calibration(1_150_000_000, 512_000, 512_000, "55", "55", "A", {-40: -17.0, -50: -27.0}),
+            )
+            save_b210_calibration(
+                path,
+                B210Calibration(1_150_000_000, 512_000, 512_000, "55", "55", "B", {-40: -20.0, -50: -30.0}),
+            )
+            cal_a = load_b210_calibration(path, 1_150_000_000, 512_000, 512_000, "55.0", "55", "A")
+            cal_b = load_b210_calibration(path, 1_150_000_000, 512_000, 512_000, "55", "55.0", "B")
+        self.assertEqual(cal_a.points_dbfs_by_dbm[-40], -17.0)
+        self.assertEqual(cal_b.points_dbfs_by_dbm[-40], -20.0)
 
 
 if __name__ == "__main__":

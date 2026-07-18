@@ -17,6 +17,8 @@ from typing import Callable, Optional
 
 from wt6_astro import TargetPosition, local_sidereal_time, moon_equatorial, moon_position, source_position
 from wt6_config import (
+    B210Calibration,
+    B210_CAL_LEVELS_DBM,
     PowerConfig,
     RtlCalibration,
     RTL_CAL_LEVELS_DBM,
@@ -26,6 +28,7 @@ from wt6_config import (
     YFactorConfig,
     calibrated_dbm_from_dbfs,
     load_configs,
+    load_b210_calibration,
     load_power_config,
     load_rtl_calibration,
     load_scan_config,
@@ -33,6 +36,7 @@ from wt6_config import (
     load_sources,
     load_yfactor_config,
     normalize_rtl_gain,
+    save_b210_calibration,
     save_configs,
     save_power_config,
     save_rtl_calibration,
@@ -1700,7 +1704,7 @@ class PowerMeterPanel(ttk.Frame):
         self.latest_power_unit = "dBFS"
         self.latest_power_calibrated = False
         self.latest_power_extrapolated = False
-        self.active_calibration: Optional[RtlCalibration] = None
+        self.active_calibrations: dict[str, B210Calibration] = {}
         self.log_handle = None
         self.log_writer: Optional[csv.writer] = None
         self.log_path: Optional[Path] = None
@@ -1749,7 +1753,7 @@ class PowerMeterPanel(ttk.Frame):
         actions.grid(row=1, column=0, columnspan=13, sticky="w", pady=(6, 0))
         ttk.Button(actions, text="SDR Power On", command=self.start).pack(side="left")
         ttk.Button(actions, text="Release SDR", command=self.stop).pack(side="left", padx=(6, 0))
-        ttk.Button(actions, text="Cal", command=self.show_b210_calibration_pending).pack(side="left", padx=(6, 0))
+        ttk.Button(actions, text="Cal", command=self.app.open_b210_calibration).pack(side="left", padx=(6, 0))
         ttk.Button(actions, text="Start Log", command=self.start_log).pack(side="left", padx=(14, 0))
         ttk.Button(actions, text="Stop Log", command=self.stop_log).pack(side="left", padx=(6, 0))
 
@@ -1774,11 +1778,21 @@ class PowerMeterPanel(ttk.Frame):
         ttk.Label(parent, text=label).grid(row=0, column=column, sticky="w", padx=(0, 2))
         ttk.Entry(parent, textvariable=variable, width=width).grid(row=0, column=column + 1, sticky="w", padx=(0, 5))
 
-    def show_b210_calibration_pending(self) -> None:
-        message = "B210 calibration is not connected yet; the old RTL calibration path is disabled from this GUI."
-        self.status_var.set("B210 CAL PENDING")
-        self.owner_var.set(message)
-        self.app.event_log.info("B210_CAL_PENDING")
+    def load_active_calibrations(self, power: PowerConfig) -> dict[str, B210Calibration]:
+        calibrations: dict[str, B210Calibration] = {}
+        for channel in ("A", "B"):
+            calibration = load_b210_calibration(
+                self.app.config_path,
+                power.center_frequency_hz,
+                power.sample_rate_hz,
+                power.measurement_bandwidth_hz,
+                power.gain_db,
+                power.gain_b_db,
+                channel,
+            )
+            if len(calibration.points_dbfs_by_dbm) >= 2:
+                calibrations[channel] = calibration
+        return calibrations
 
     def samples_display_value(self, stored_value: str) -> str:
         text = stored_value.strip().lower()
@@ -1957,7 +1971,7 @@ class PowerMeterPanel(ttk.Frame):
         save_power_config(self.app.config_path, self.app.power_config)
         self.reset_measurements(clear_history=True)
         self.warmup_seconds = power_config.warmup_seconds
-        self.active_calibration = None
+        self.active_calibrations = self.load_active_calibrations(power_config)
         self.stop_event.clear()
         self.power_started_at = 0.0
         self.status_var.set("Starting B210...")
@@ -2038,15 +2052,17 @@ class PowerMeterPanel(ttk.Frame):
         average_b = sum(self.power_b_values) / len(self.power_b_values)
         self.latest_power_dbfs = average_a
         self.latest_power_b_dbfs = average_b
-        measurement = self.display_measurement(average_a)
+        measurement = self.display_measurement(average_a, "A")
+        measurement_b = self.display_measurement(average_b, "B")
         self.latest_power_value = float(measurement["power_value"])
-        self.latest_power_b_value = average_b
+        self.latest_power_b_value = float(measurement_b["power_value"])
         self.latest_power_unit = str(measurement["power_unit"])
         self.latest_power_calibrated = bool(measurement["power_calibrated"])
         self.latest_power_extrapolated = bool(measurement["power_extrapolated"])
         suffix = " EXT" if self.latest_power_extrapolated else ""
+        suffix_b = " EXT" if measurement_b["power_extrapolated"] else ""
         self.power_var.set(f"{self.latest_power_value:0.1f} {self.latest_power_unit}{suffix}")
-        self.power_b_var.set(f"{average_b:0.1f} dBFS")
+        self.power_b_var.set(f"{float(measurement_b['power_value']):0.1f} {measurement_b['power_unit']}{suffix_b}")
         self.history_values.append(average_a)
         self.history_values = self.history_values[-600:]
         self.history_display_values.append(self.latest_power_value)
@@ -2069,23 +2085,10 @@ class PowerMeterPanel(ttk.Frame):
             message=self.status_var.get(),
         )
 
-    def load_active_calibration(self, power: PowerConfig) -> Optional[RtlCalibration]:
-        try:
-            calibration = load_rtl_calibration(
-                self.app.config_path,
-                power.center_frequency_hz,
-                power.sample_rate_hz,
-                power.gain_db,
-            )
-        except ValueError:
-            return None
-        if len(calibration.points_dbfs_by_dbm) < 2:
-            return None
-        return calibration
-
-    def display_measurement(self, power_dbfs: float) -> dict[str, object]:
-        if self.active_calibration:
-            converted = calibrated_dbm_from_dbfs(self.active_calibration, power_dbfs)
+    def display_measurement(self, power_dbfs: float, channel: str = "A") -> dict[str, object]:
+        calibration = self.active_calibrations.get(self.normalize_power_channel(channel))
+        if calibration:
+            converted = calibrated_dbm_from_dbfs(calibration, power_dbfs)
             if converted:
                 power_dbm, extrapolated = converted
                 return {
@@ -2110,17 +2113,12 @@ class PowerMeterPanel(ttk.Frame):
         if channel == "B":
             if self.latest_power_b_dbfs is None:
                 return None
-            return {
-                "power_dbfs": self.latest_power_b_dbfs,
-                "power_value": self.latest_power_b_dbfs,
-                "power_unit": "dBFS",
-                "power_calibrated": False,
-                "power_extrapolated": False,
-                "power_channel": "B",
-            }
+            measurement = self.display_measurement(self.latest_power_b_dbfs, "B")
+            measurement["power_channel"] = "B"
+            return measurement
         if self.latest_power_dbfs is None:
             return None
-        measurement = self.display_measurement(self.latest_power_dbfs)
+        measurement = self.display_measurement(self.latest_power_dbfs, "A")
         measurement["power_channel"] = "A"
         return measurement
 
@@ -2158,7 +2156,7 @@ class PowerMeterPanel(ttk.Frame):
         )
 
     def calibration_status_suffix(self) -> str:
-        if self.latest_power_calibrated or self.active_calibration:
+        if self.latest_power_calibrated or self.active_calibrations:
             return "CAL EXT" if self.latest_power_extrapolated else "CAL"
         return "UNCAL"
 
@@ -2173,7 +2171,7 @@ class PowerMeterPanel(ttk.Frame):
         self.thread = None
         if self.stop_event.is_set():
             self.reset_measurements(clear_history=True)
-            self.active_calibration = None
+            self.active_calibrations = {}
             self.active_meter_config = None
             self.status_var.set("SDR RELEASED")
             self.owner_var.set("SDR released for other apps")
@@ -2197,6 +2195,170 @@ class PowerMeterPanel(ttk.Frame):
         if clear_history:
             self.history_values.clear()
             self.history_display_values.clear()
+
+class B210CalibrationDialog(tk.Toplevel):
+    LEVELS_DBM = B210_CAL_LEVELS_DBM
+
+    def __init__(self, app: "WT6App") -> None:
+        super().__init__(app)
+        self.app = app
+        self.title("B210 Calibration")
+        self.resizable(False, False)
+        self.transient(app)
+        self.grab_set()
+        self.frequency_var = tk.StringVar(value=app.power_panel.freq_var.get())
+        self.sample_rate_var = tk.StringVar(value=app.power_panel.rate_var.get())
+        self.bandwidth_var = tk.StringVar(value=app.power_panel.bandwidth_var.get())
+        self.gain_a_var = tk.StringVar(value=app.power_panel.gain_var.get())
+        self.gain_b_var = tk.StringVar(value=app.power_panel.gain_b_var.get())
+        self.status_var = tk.StringVar(value="Set signal generator level, then capture each row.")
+        self.level_vars_a: dict[int, tk.StringVar] = {level: tk.StringVar(value="--") for level in self.LEVELS_DBM}
+        self.level_vars_b: dict[int, tk.StringVar] = {level: tk.StringVar(value="--") for level in self.LEVELS_DBM}
+
+        body = ttk.Frame(self, padding=10)
+        body.grid(row=0, column=0, sticky="nsew")
+        ttk.Label(body, text="Freq MHz").grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Entry(body, textvariable=self.frequency_var, width=9).grid(row=0, column=1, sticky="w", pady=2)
+        ttk.Label(body, text="Rate ksps").grid(row=0, column=2, sticky="w", padx=(8, 0), pady=2)
+        ttk.Entry(body, textvariable=self.sample_rate_var, width=8).grid(row=0, column=3, sticky="w", pady=2)
+        ttk.Label(body, text="BW kHz").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Entry(body, textvariable=self.bandwidth_var, width=9).grid(row=1, column=1, sticky="w", pady=2)
+        ttk.Label(body, text="Gain A").grid(row=1, column=2, sticky="w", padx=(8, 0), pady=2)
+        ttk.Entry(body, textvariable=self.gain_a_var, width=8).grid(row=1, column=3, sticky="w", pady=2)
+        ttk.Label(body, text="Gain B").grid(row=2, column=2, sticky="w", padx=(8, 0), pady=2)
+        ttk.Entry(body, textvariable=self.gain_b_var, width=8).grid(row=2, column=3, sticky="w", pady=2)
+        ttk.Button(body, text="Load", command=self.load_frequency).grid(row=0, column=4, rowspan=3, sticky="nsw", padx=(8, 0), pady=2)
+
+        table = ttk.Frame(body)
+        table.grid(row=3, column=0, columnspan=5, sticky="ew", pady=(8, 0))
+        ttk.Label(table, text="Source dBm").grid(row=0, column=0, sticky="w", padx=(0, 12))
+        ttk.Label(table, text="CH A dBFS").grid(row=0, column=1, sticky="w", padx=(0, 12))
+        ttk.Label(table, text="CH B dBFS").grid(row=0, column=2, sticky="w", padx=(0, 12))
+        for row, level in enumerate(self.LEVELS_DBM, start=1):
+            ttk.Label(table, text=f"{level:d}").grid(row=row, column=0, sticky="w", pady=2)
+            ttk.Label(table, textvariable=self.level_vars_a[level], width=10).grid(row=row, column=1, sticky="w", pady=2)
+            ttk.Label(table, textvariable=self.level_vars_b[level], width=10).grid(row=row, column=2, sticky="w", pady=2)
+            ttk.Button(table, text="Capture", command=lambda l=level: self.capture_level(l)).grid(
+                row=row, column=3, sticky="ew", pady=2
+            )
+
+        ttk.Label(body, textvariable=self.status_var, foreground="red", wraplength=460).grid(
+            row=4, column=0, columnspan=5, sticky="ew", pady=(8, 0)
+        )
+        buttons = ttk.Frame(self, padding=(10, 0, 10, 10))
+        buttons.grid(row=1, column=0, sticky="ew")
+        ttk.Button(buttons, text="Save", command=self.save).pack(side="left")
+        ttk.Button(buttons, text="Close", command=self.close).pack(side="right")
+        self.protocol("WM_DELETE_WINDOW", self.close)
+        self.load_frequency()
+
+    def frequency_hz(self) -> int:
+        return int(round(float(self.frequency_var.get()) * 1_000_000))
+
+    def sample_rate_hz(self) -> int:
+        return int(round(float(self.sample_rate_var.get()) * 1000))
+
+    def bandwidth_hz(self) -> int:
+        return int(round(float(self.bandwidth_var.get()) * 1000))
+
+    def load_frequency(self) -> None:
+        try:
+            cal_a = load_b210_calibration(
+                self.app.config_path,
+                self.frequency_hz(),
+                self.sample_rate_hz(),
+                self.bandwidth_hz(),
+                self.gain_a_var.get(),
+                self.gain_b_var.get(),
+                "A",
+            )
+            cal_b = load_b210_calibration(
+                self.app.config_path,
+                self.frequency_hz(),
+                self.sample_rate_hz(),
+                self.bandwidth_hz(),
+                self.gain_a_var.get(),
+                self.gain_b_var.get(),
+                "B",
+            )
+        except ValueError:
+            self.status_var.set("Frequency, sample rate, bandwidth, and gains must be valid.")
+            return
+        for level in self.LEVELS_DBM:
+            value_a = cal_a.points_dbfs_by_dbm.get(level)
+            value_b = cal_b.points_dbfs_by_dbm.get(level)
+            self.level_vars_a[level].set(f"{value_a:0.2f}" if value_a is not None else "--")
+            self.level_vars_b[level].set(f"{value_b:0.2f}" if value_b is not None else "--")
+        self.status_var.set(
+            f"Loaded B210 calibration at {cal_a.frequency_hz / 1_000_000:0.1f} MHz, "
+            f"{cal_a.sample_rate_hz / 1000:0.0f} ksps, BW {cal_a.bandwidth_hz / 1000:0.0f} kHz."
+        )
+
+    def capture_level(self, level_dbm: int) -> None:
+        panel = self.app.power_panel
+        if panel.latest_power_dbfs is None or panel.latest_power_b_dbfs is None:
+            self.status_var.set("Start B210 power and wait for CH A and CH B readings before capture.")
+            return
+        if panel.is_warming():
+            self.status_var.set("B210 power meter is still warming; wait for Ready before capture.")
+            return
+        self.level_vars_a[level_dbm].set(f"{panel.latest_power_dbfs:0.2f}")
+        self.level_vars_b[level_dbm].set(f"{panel.latest_power_b_dbfs:0.2f}")
+        self.status_var.set(
+            f"Captured {level_dbm:d} dBm: CH A {panel.latest_power_dbfs:0.2f} dBFS, "
+            f"CH B {panel.latest_power_b_dbfs:0.2f} dBFS."
+        )
+
+    def save(self) -> None:
+        try:
+            frequency_hz = self.frequency_hz()
+            sample_rate_hz = self.sample_rate_hz()
+            bandwidth_hz = self.bandwidth_hz()
+            gain_a = self.gain_a_var.get().strip()
+            gain_b = self.gain_b_var.get().strip()
+            points_a = self.points_from_fields(self.level_vars_a)
+            points_b = self.points_from_fields(self.level_vars_b)
+        except ValueError as exc:
+            self.status_var.set(str(exc))
+            return
+        if len(points_a) < 2 or len(points_b) < 2:
+            self.status_var.set("Capture at least two calibration points for both channels before saving.")
+            return
+        save_b210_calibration(
+            self.app.config_path,
+            B210Calibration(frequency_hz, sample_rate_hz, bandwidth_hz, gain_a, gain_b, "A", points_a),
+        )
+        save_b210_calibration(
+            self.app.config_path,
+            B210Calibration(frequency_hz, sample_rate_hz, bandwidth_hz, gain_a, gain_b, "B", points_b),
+        )
+        self.app.power_panel.active_calibrations = self.app.power_panel.load_active_calibrations(self.app.power_config)
+        self.app.event_log.info(
+            "B210_CAL_SAVE",
+            frequency_hz=frequency_hz,
+            sample_rate_hz=sample_rate_hz,
+            bandwidth_hz=bandwidth_hz,
+            gain_a=gain_a,
+            gain_b=gain_b,
+            points_a=len(points_a),
+            points_b=len(points_b),
+        )
+        self.status_var.set(f"Saved B210 calibration: CH A {len(points_a)} points, CH B {len(points_b)} points.")
+
+    def points_from_fields(self, variables: dict[int, tk.StringVar]) -> dict[int, float]:
+        points: dict[int, float] = {}
+        for level, variable in variables.items():
+            text = variable.get().strip()
+            if not text or text == "--":
+                continue
+            points[level] = float(text)
+        return points
+
+    def close(self) -> None:
+        if self.app.b210_calibration_dialog is self:
+            self.app.b210_calibration_dialog = None
+        self.destroy()
+
 
 class RtlCalibrationDialog(tk.Toplevel):
     LEVELS_DBM = RTL_CAL_LEVELS_DBM
@@ -2308,7 +2470,7 @@ class RtlCalibrationDialog(tk.Toplevel):
                 points_dbfs_by_dbm=points,
             ),
         )
-        self.app.power_panel.active_calibration = self.app.power_panel.load_active_calibration(self.app.power_config)
+        self.app.power_panel.active_calibrations = self.app.power_panel.load_active_calibrations(self.app.power_config)
         self.app.event_log.info(
             "RTL_CAL_SAVE",
             frequency_hz=frequency_hz,
@@ -2851,6 +3013,7 @@ class WT6App(tk.Tk):
         self.scan_dialog: Optional[ScanCalibrationDialog] = None
         self.yfactor_dialog: Optional[YFactorDialog] = None
         self.rtl_calibration_dialog: Optional[RtlCalibrationDialog] = None
+        self.b210_calibration_dialog: Optional[B210CalibrationDialog] = None
 
         self.status_var = tk.StringVar(value="Load config, connect antennas, then use guarded jogs.")
         self.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -4678,6 +4841,12 @@ class WT6App(tk.Tk):
             self.rtl_calibration_dialog.lift()
             return
         self.rtl_calibration_dialog = RtlCalibrationDialog(self)
+
+    def open_b210_calibration(self) -> None:
+        if self.b210_calibration_dialog and self.b210_calibration_dialog.winfo_exists():
+            self.b210_calibration_dialog.lift()
+            return
+        self.b210_calibration_dialog = B210CalibrationDialog(self)
 
     def refresh_calibration_views(self, name: Optional[str] = None, position: Optional[Position] = None) -> None:
         if self.calibration_dialog and self.calibration_dialog.winfo_exists():

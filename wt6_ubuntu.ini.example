@@ -33,13 +33,11 @@ b210_device_args = num_recv_frames=256
 east_channel = A
 west_channel = B
 
-# Legacy RTL calibration sections are ignored by the B210 power backend.
-# [rtl_cal:1200000000:1024000:29p7]
-# frequency_hz = 1200000000
-# sample_rate_hz = 1024000
-# gain_db = 29.7
-# dbm_-40 = -12.300
-# dbm_-50 = -22.100
+# B210 calibration is saved by the Cal button as one section per channel,
+# keyed by frequency, sample rate, bandwidth, and both gain settings.
+# [b210_cal:1200000000:1024000:512000:a48:b48:chA]
+# dbm_-40 = -17.300
+# dbm_-50 = -27.100
 
 [scan]
 span_degrees = 4.000

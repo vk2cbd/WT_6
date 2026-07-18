@@ -89,7 +89,19 @@ class RtlCalibration:
     points_dbfs_by_dbm: dict[int, float]
 
 
+@dataclass
+class B210Calibration:
+    frequency_hz: int
+    sample_rate_hz: int
+    bandwidth_hz: int
+    gain_a_db: str
+    gain_b_db: str
+    channel: str
+    points_dbfs_by_dbm: dict[int, float]
+
+
 RTL_CAL_LEVELS_DBM = tuple(range(-40, -111, -10))
+B210_CAL_LEVELS_DBM = RTL_CAL_LEVELS_DBM
 
 
 def _read_parser(parser: configparser.ConfigParser, path: Path) -> None:
@@ -172,6 +184,70 @@ def save_rtl_calibration(path: Union[str, Path], calibration: RtlCalibration) ->
         parser.write(handle)
 
 
+def load_b210_calibration(
+    path: Union[str, Path],
+    frequency_hz: int,
+    sample_rate_hz: int,
+    bandwidth_hz: int,
+    gain_a_db: str,
+    gain_b_db: str,
+    channel: str,
+) -> B210Calibration:
+    path = Path(path)
+    parser = configparser.ConfigParser()
+    if path.exists():
+        _read_parser(parser, path)
+    channel = normalize_power_channel(channel)
+    gain_a_db = normalize_b210_gain(gain_a_db)
+    gain_b_db = normalize_b210_gain(gain_b_db)
+    section = _b210_cal_section(frequency_hz, sample_rate_hz, bandwidth_hz, gain_a_db, gain_b_db, channel)
+    points: dict[int, float] = {}
+    for level_dbm in B210_CAL_LEVELS_DBM:
+        key = _rtl_cal_key(level_dbm)
+        if parser.has_option(section, key):
+            points[level_dbm] = parser.getfloat(section, key)
+    return B210Calibration(
+        frequency_hz=frequency_hz,
+        sample_rate_hz=sample_rate_hz,
+        bandwidth_hz=bandwidth_hz,
+        gain_a_db=gain_a_db,
+        gain_b_db=gain_b_db,
+        channel=channel,
+        points_dbfs_by_dbm=points,
+    )
+
+
+def save_b210_calibration(path: Union[str, Path], calibration: B210Calibration) -> None:
+    path = Path(path)
+    parser = configparser.ConfigParser()
+    if path.exists():
+        _read_parser(parser, path)
+    channel = normalize_power_channel(calibration.channel)
+    gain_a_db = normalize_b210_gain(calibration.gain_a_db)
+    gain_b_db = normalize_b210_gain(calibration.gain_b_db)
+    section = _b210_cal_section(
+        calibration.frequency_hz,
+        calibration.sample_rate_hz,
+        calibration.bandwidth_hz,
+        gain_a_db,
+        gain_b_db,
+        channel,
+    )
+    parser[section] = {
+        "frequency_hz": str(int(calibration.frequency_hz)),
+        "sample_rate_hz": str(int(calibration.sample_rate_hz)),
+        "bandwidth_hz": str(int(calibration.bandwidth_hz)),
+        "gain_a_db": gain_a_db,
+        "gain_b_db": gain_b_db,
+        "channel": channel,
+    }
+    for level_dbm in B210_CAL_LEVELS_DBM:
+        if level_dbm in calibration.points_dbfs_by_dbm:
+            parser[section][_rtl_cal_key(level_dbm)] = f"{calibration.points_dbfs_by_dbm[level_dbm]:.3f}"
+    with path.open("w", encoding="utf-8") as handle:
+        parser.write(handle)
+
+
 def calibrated_dbm_from_dbfs(calibration: RtlCalibration, power_dbfs: float) -> tuple[float, bool] | None:
     points = sorted((dbfs, dbm) for dbm, dbfs in calibration.points_dbfs_by_dbm.items())
     if not points:
@@ -200,6 +276,31 @@ def _interpolate_calibration(lower: tuple[float, int], upper: tuple[float, int],
 
 def _rtl_cal_section(frequency_hz: int, sample_rate_hz: int, gain_db: str) -> str:
     return f"rtl_cal:{int(frequency_hz)}:{int(sample_rate_hz)}:{_rtl_gain_key_part(gain_db)}"
+
+
+def _b210_cal_section(
+    frequency_hz: int,
+    sample_rate_hz: int,
+    bandwidth_hz: int,
+    gain_a_db: str,
+    gain_b_db: str,
+    channel: str,
+) -> str:
+    return (
+        f"b210_cal:{int(frequency_hz)}:{int(sample_rate_hz)}:{int(bandwidth_hz)}:"
+        f"a{_rtl_gain_key_part(gain_a_db)}:b{_rtl_gain_key_part(gain_b_db)}:ch{normalize_power_channel(channel)}"
+    )
+
+
+def normalize_b210_gain(gain_db: str) -> str:
+    text = str(gain_db).strip().lower()
+    if text in ("", "auto"):
+        return "auto"
+    try:
+        value = float(text)
+    except ValueError:
+        return text
+    return f"{value:g}"
 
 
 def normalize_rtl_gain(gain_db: str) -> str:
