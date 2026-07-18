@@ -81,6 +81,27 @@ class B210PowerPanelRoutingTests(unittest.TestCase):
         self.assertEqual(measurement["power_unit"], "dBm")
         self.assertAlmostEqual(measurement["power_value"], -50.0)
 
+    def test_power_log_header_labels_both_channels(self):
+        from wt6_ubuntu_gui import PowerMeterPanel
+
+        class DummyApp:
+            panels = {}
+
+        panel = PowerMeterPanel.__new__(PowerMeterPanel)
+        panel.app = DummyApp()
+        header = panel.log_header()
+        for column in (
+            "ch_a_dbfs",
+            "ch_a_value",
+            "ch_a_unit",
+            "ch_a_calibrated",
+            "ch_b_dbfs",
+            "ch_b_value",
+            "ch_b_unit",
+            "ch_b_calibrated",
+        ):
+            self.assertIn(column, header)
+
 
 if __name__ == "__main__":
     unittest.main()

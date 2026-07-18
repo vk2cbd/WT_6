@@ -1702,8 +1702,11 @@ class PowerMeterPanel(ttk.Frame):
         self.latest_power_value: Optional[float] = None
         self.latest_power_b_value: Optional[float] = None
         self.latest_power_unit = "dBFS"
+        self.latest_power_b_unit = "dBFS"
         self.latest_power_calibrated = False
+        self.latest_power_b_calibrated = False
         self.latest_power_extrapolated = False
+        self.latest_power_b_extrapolated = False
         self.active_calibrations: dict[str, B210Calibration] = {}
         self.log_handle = None
         self.log_writer: Optional[csv.writer] = None
@@ -1724,6 +1727,7 @@ class PowerMeterPanel(ttk.Frame):
         self.power_var = tk.StringVar(value="--.- dBFS")
         self.power_b_var = tk.StringVar(value="--.- dBFS")
         self.status_var = tk.StringVar(value="SDR RELEASED")
+        self.log_status_var = tk.StringVar(value="Log stopped")
         self.stats_var = tk.StringVar(value="Avg -- Min -- Max --")
         self.stats_b_var = tk.StringVar(value="Avg -- Min -- Max --")
         self.owner_var = tk.StringVar(value="SDR released for other apps")
@@ -1731,6 +1735,7 @@ class PowerMeterPanel(ttk.Frame):
         self.columnconfigure(1, weight=1)
         ttk.Label(self, text="B210", font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="nw", padx=(0, 12))
         ttk.Label(self, textvariable=self.status_var).grid(row=1, column=0, sticky="nw", padx=(0, 12))
+        ttk.Label(self, textvariable=self.log_status_var).grid(row=2, column=0, sticky="nw", padx=(0, 12), pady=(3, 0))
 
         channels = ttk.Frame(self)
         channels.grid(row=0, column=1, sticky="ew")
@@ -1875,7 +1880,9 @@ class PowerMeterPanel(ttk.Frame):
 
     def start_log(self) -> None:
         if self.log_writer:
-            self.status_var.set(f"Logging {self.log_path.name if self.log_path else ''}".strip())
+            message = f"Logging {self.log_path.name if self.log_path else ''}".strip()
+            self.status_var.set(message)
+            self.log_status_var.set(message)
             return
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         self.log_path = Path(f"wt6_power_{timestamp}.csv")
@@ -1883,27 +1890,37 @@ class PowerMeterPanel(ttk.Frame):
         self.log_writer = csv.writer(self.log_handle)
         self.log_writer.writerow(self.log_header())
         self.status_var.set(f"Logging {self.log_path.name}")
+        self.log_status_var.set(f"Logging {self.log_path.name}")
+        self.app.event_log.info("B210_POWER_LOG_START", csv=str(self.log_path))
 
     def stop_log(self) -> None:
+        stopped_path = self.log_path
         if self.log_handle:
             self.log_handle.close()
         self.log_handle = None
         self.log_writer = None
         self.log_path = None
-        if not (self.thread and self.thread.is_alive()):
+        if stopped_path:
+            self.status_var.set(f"Log stopped: {stopped_path.name}")
+            self.log_status_var.set(f"Log stopped: {stopped_path.name}")
+            self.app.event_log.info("B210_POWER_LOG_STOP", csv=str(stopped_path))
+        elif not (self.thread and self.thread.is_alive()):
             self.status_var.set("SDR RELEASED")
 
     def log_header(self) -> list[str]:
         header = [
             "local_time",
             "utc_time",
-            "power_dbfs",
-            "power_b_dbfs",
-            "power_value",
-            "power_b_value",
-            "power_unit",
-            "power_calibrated",
-            "power_extrapolated",
+            "ch_a_dbfs",
+            "ch_b_dbfs",
+            "ch_a_value",
+            "ch_a_unit",
+            "ch_a_calibrated",
+            "ch_a_extrapolated",
+            "ch_b_value",
+            "ch_b_unit",
+            "ch_b_calibrated",
+            "ch_b_extrapolated",
             "target_name",
             "target_az",
             "target_el",
@@ -1924,10 +1941,13 @@ class PowerMeterPanel(ttk.Frame):
             f"{power_dbfs:0.2f}",
             f"{power_b_dbfs:0.2f}" if power_b_dbfs is not None else "",
             f"{self.latest_power_value:0.2f}" if self.latest_power_value is not None else "",
-            f"{self.latest_power_b_value:0.2f}" if self.latest_power_b_value is not None else "",
             self.latest_power_unit,
             "yes" if self.latest_power_calibrated else "no",
             "yes" if self.latest_power_extrapolated else "no",
+            f"{self.latest_power_b_value:0.2f}" if self.latest_power_b_value is not None else "",
+            self.latest_power_b_unit,
+            "yes" if self.latest_power_b_calibrated else "no",
+            "yes" if self.latest_power_b_extrapolated else "no",
             self.app.target_name_var.get().replace("Target ", ""),
             f"{target.azimuth:0.3f}" if target else "",
             f"{target.elevation:0.3f}" if target else "",
@@ -1994,6 +2014,8 @@ class PowerMeterPanel(ttk.Frame):
         )
 
     def stop(self) -> None:
+        if self.log_writer:
+            self.stop_log()
         self.stop_event.set()
         if self.thread and self.thread.is_alive():
             self.status_var.set("Releasing SDR...")
@@ -2057,8 +2079,11 @@ class PowerMeterPanel(ttk.Frame):
         self.latest_power_value = float(measurement["power_value"])
         self.latest_power_b_value = float(measurement_b["power_value"])
         self.latest_power_unit = str(measurement["power_unit"])
+        self.latest_power_b_unit = str(measurement_b["power_unit"])
         self.latest_power_calibrated = bool(measurement["power_calibrated"])
+        self.latest_power_b_calibrated = bool(measurement_b["power_calibrated"])
         self.latest_power_extrapolated = bool(measurement["power_extrapolated"])
+        self.latest_power_b_extrapolated = bool(measurement_b["power_extrapolated"])
         suffix = " EXT" if self.latest_power_extrapolated else ""
         suffix_b = " EXT" if measurement_b["power_extrapolated"] else ""
         self.power_var.set(f"{self.latest_power_value:0.1f} {self.latest_power_unit}{suffix}")
@@ -2186,8 +2211,11 @@ class PowerMeterPanel(ttk.Frame):
         self.latest_power_value = None
         self.latest_power_b_value = None
         self.latest_power_unit = "dBFS"
+        self.latest_power_b_unit = "dBFS"
         self.latest_power_calibrated = False
+        self.latest_power_b_calibrated = False
         self.latest_power_extrapolated = False
+        self.latest_power_b_extrapolated = False
         self.power_var.set("--.- dBFS")
         self.power_b_var.set("--.- dBFS")
         self.stats_var.set("Avg -- Min -- Max --")
