@@ -1740,16 +1740,14 @@ class PowerMeterPanel(ttk.Frame):
         channels = ttk.Frame(self)
         channels.grid(row=0, column=1, sticky="ew")
         channels.columnconfigure(0, weight=1)
-        channels.columnconfigure(1, weight=1)
+        channels.columnconfigure(1, weight=0, minsize=220)
+        channels.columnconfigure(2, weight=1)
         self._channel_panel(channels, 0, "CH A", self.power_var, self.gain_var, self.stats_var)
-        self._channel_panel(channels, 1, "CH B", self.power_b_var, self.gain_b_var, self.stats_b_var)
-
         status_line = ttk.Frame(channels)
-        status_line.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5, 0))
-        status_line.columnconfigure(0, weight=1)
-        status_line.columnconfigure(1, weight=1)
-        ttk.Label(status_line, textvariable=self.status_display_var, wraplength=360, justify="left").grid(row=0, column=0, sticky="w")
-        ttk.Label(status_line, textvariable=self.log_status_var, wraplength=360, justify="left").grid(row=0, column=1, sticky="w", padx=(18, 0))
+        status_line.grid(row=0, column=1, sticky="nsew", padx=(8, 18))
+        ttk.Label(status_line, textvariable=self.status_display_var, wraplength=210, justify="left").grid(row=0, column=0, sticky="w")
+        ttk.Label(status_line, textvariable=self.log_status_var, wraplength=210, justify="left").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        self._channel_panel(channels, 2, "CH B", self.power_b_var, self.gain_b_var, self.stats_b_var)
 
         fields = ttk.Frame(self)
         fields.grid(row=1, column=1, sticky="ew", pady=(6, 0))
@@ -1772,8 +1770,8 @@ class PowerMeterPanel(ttk.Frame):
 
     def refresh_status_display(self) -> None:
         text = self.status_var.get()
-        if len(text) > 96:
-            text = text[:93].rstrip() + "..."
+        if len(text) > 58:
+            text = text[:55].rstrip() + "..."
         self.status_display_var.set(text)
 
     def _channel_panel(
@@ -2253,7 +2251,8 @@ class B210CalibrationDialog(tk.Toplevel):
         self.bandwidth_var = tk.StringVar(value=app.power_panel.bandwidth_var.get())
         self.gain_a_var = tk.StringVar(value=app.power_panel.gain_var.get())
         self.gain_b_var = tk.StringVar(value=app.power_panel.gain_b_var.get())
-        self.status_var = tk.StringVar(value="Set signal generator level, then capture each row.")
+        self.channel_var = tk.StringVar(value="A")
+        self.status_var = tk.StringVar(value="Select channel, set signal generator level, then capture each row.")
         self.level_vars_a: dict[int, tk.StringVar] = {level: tk.StringVar(value="--") for level in self.LEVELS_DBM}
         self.level_vars_b: dict[int, tk.StringVar] = {level: tk.StringVar(value="--") for level in self.LEVELS_DBM}
 
@@ -2269,6 +2268,8 @@ class B210CalibrationDialog(tk.Toplevel):
         ttk.Entry(body, textvariable=self.gain_a_var, width=8).grid(row=1, column=3, sticky="w", pady=2)
         ttk.Label(body, text="Gain B").grid(row=2, column=2, sticky="w", padx=(8, 0), pady=2)
         ttk.Entry(body, textvariable=self.gain_b_var, width=8).grid(row=2, column=3, sticky="w", pady=2)
+        ttk.Label(body, text="Cal channel").grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Combobox(body, textvariable=self.channel_var, values=("A", "B"), width=6, state="readonly").grid(row=2, column=1, sticky="w", pady=2)
         ttk.Button(body, text="Load", command=self.load_frequency).grid(row=0, column=4, rowspan=3, sticky="nsw", padx=(8, 0), pady=2)
 
         table = ttk.Frame(body)
@@ -2280,7 +2281,7 @@ class B210CalibrationDialog(tk.Toplevel):
             ttk.Label(table, text=f"{level:d}").grid(row=row, column=0, sticky="w", pady=2)
             ttk.Label(table, textvariable=self.level_vars_a[level], width=10).grid(row=row, column=1, sticky="w", pady=2)
             ttk.Label(table, textvariable=self.level_vars_b[level], width=10).grid(row=row, column=2, sticky="w", pady=2)
-            ttk.Button(table, text="Capture", command=lambda l=level: self.capture_level(l)).grid(
+            ttk.Button(table, text="Capture Selected", command=lambda l=level: self.capture_level(l)).grid(
                 row=row, column=3, sticky="ew", pady=2
             )
 
@@ -2289,7 +2290,7 @@ class B210CalibrationDialog(tk.Toplevel):
         )
         buttons = ttk.Frame(self, padding=(10, 0, 10, 10))
         buttons.grid(row=1, column=0, sticky="ew")
-        ttk.Button(buttons, text="Save", command=self.save).pack(side="left")
+        ttk.Button(buttons, text="Save Selected", command=self.save).pack(side="left")
         ttk.Button(buttons, text="Close", command=self.close).pack(side="right")
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.load_frequency()
@@ -2338,18 +2339,17 @@ class B210CalibrationDialog(tk.Toplevel):
 
     def capture_level(self, level_dbm: int) -> None:
         panel = self.app.power_panel
-        if panel.latest_power_dbfs is None or panel.latest_power_b_dbfs is None:
-            self.status_var.set("Start B210 power and wait for CH A and CH B readings before capture.")
+        channel = self.selected_channel()
+        power = panel.latest_power_dbfs if channel == "A" else panel.latest_power_b_dbfs
+        if power is None:
+            self.status_var.set(f"Start B210 power and wait for CH {channel} readings before capture.")
             return
         if panel.is_warming():
             self.status_var.set("B210 power meter is still warming; wait for Ready before capture.")
             return
-        self.level_vars_a[level_dbm].set(f"{panel.latest_power_dbfs:0.2f}")
-        self.level_vars_b[level_dbm].set(f"{panel.latest_power_b_dbfs:0.2f}")
-        self.status_var.set(
-            f"Captured {level_dbm:d} dBm: CH A {panel.latest_power_dbfs:0.2f} dBFS, "
-            f"CH B {panel.latest_power_b_dbfs:0.2f} dBFS."
-        )
+        variables = self.level_vars_a if channel == "A" else self.level_vars_b
+        variables[level_dbm].set(f"{power:0.2f}")
+        self.status_var.set(f"Captured {level_dbm:d} dBm for CH {channel}: {power:0.2f} dBFS.")
 
     def save(self) -> None:
         try:
@@ -2358,21 +2358,18 @@ class B210CalibrationDialog(tk.Toplevel):
             bandwidth_hz = self.bandwidth_hz()
             gain_a = self.gain_a_var.get().strip()
             gain_b = self.gain_b_var.get().strip()
-            points_a = self.points_from_fields(self.level_vars_a)
-            points_b = self.points_from_fields(self.level_vars_b)
+            channel = self.selected_channel()
+            variables = self.level_vars_a if channel == "A" else self.level_vars_b
+            points = self.points_from_fields(variables)
         except ValueError as exc:
             self.status_var.set(str(exc))
             return
-        if len(points_a) < 2 or len(points_b) < 2:
-            self.status_var.set("Capture at least two calibration points for both channels before saving.")
+        if len(points) < 2:
+            self.status_var.set(f"Capture at least two calibration points for CH {channel} before saving.")
             return
         save_b210_calibration(
             self.app.config_path,
-            B210Calibration(frequency_hz, sample_rate_hz, bandwidth_hz, gain_a, gain_b, "A", points_a),
-        )
-        save_b210_calibration(
-            self.app.config_path,
-            B210Calibration(frequency_hz, sample_rate_hz, bandwidth_hz, gain_a, gain_b, "B", points_b),
+            B210Calibration(frequency_hz, sample_rate_hz, bandwidth_hz, gain_a, gain_b, channel, points),
         )
         self.app.power_panel.active_calibrations = self.app.power_panel.load_active_calibrations(self.app.power_config)
         self.app.event_log.info(
@@ -2382,10 +2379,13 @@ class B210CalibrationDialog(tk.Toplevel):
             bandwidth_hz=bandwidth_hz,
             gain_a=gain_a,
             gain_b=gain_b,
-            points_a=len(points_a),
-            points_b=len(points_b),
+            channel=channel,
+            points=len(points),
         )
-        self.status_var.set(f"Saved B210 calibration: CH A {len(points_a)} points, CH B {len(points_b)} points.")
+        self.status_var.set(f"Saved B210 calibration: CH {channel} {len(points)} points.")
+
+    def selected_channel(self) -> str:
+        return "B" if self.channel_var.get().strip().upper() == "B" else "A"
 
     def points_from_fields(self, variables: dict[int, tk.StringVar]) -> dict[int, float]:
         points: dict[int, float] = {}
