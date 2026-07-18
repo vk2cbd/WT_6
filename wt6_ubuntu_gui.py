@@ -1684,6 +1684,7 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.stop_event = threading.Event()
         self.thread: Optional[threading.Thread] = None
         self.meter: Optional[B210PowerMeter] = None
+        self.active_meter_config: Optional[B210PowerMeterConfig] = None
         self.power_values: list[float] = []
         self.power_b_values: list[float] = []
         self.last_reading_time = 0.0
@@ -1929,15 +1930,22 @@ class PowerMeterPanel(ttk.LabelFrame):
             self.log_handle.flush()
 
     def start(self) -> None:
-        if self.thread and self.thread.is_alive():
-            self.status_var.set("SDR POWER ON")
-            return
         try:
             power_config = self.power_config_from_fields()
             meter_config = self.meter_config_from_fields()
         except Exception as exc:
             self.status_var.set(str(exc))
             return
+        if self.thread and self.thread.is_alive():
+            if meter_config == self.active_meter_config:
+                self.status_var.set("SDR POWER ON")
+                return
+            self.status_var.set("Restarting B210 with new settings...")
+            self.stop_event.set()
+            self.wait_for_stop(timeout=3.0)
+            if self.thread and self.thread.is_alive():
+                self.status_var.set("B210 is still releasing; press SDR Power On again in a moment.")
+                return
         self.app.power_config = power_config
         self.format_fields(power_config)
         save_power_config(self.app.config_path, self.app.power_config)
@@ -1949,6 +1957,7 @@ class PowerMeterPanel(ttk.LabelFrame):
         self.status_var.set("Starting B210...")
         self.owner_var.set("WT6 owns B210 while SDR power is on")
         self.app.state_store.set_power(PowerRunState.STARTING, message="Starting B210")
+        self.active_meter_config = meter_config
         self.thread = threading.Thread(target=self.power_loop, args=(meter_config,), name="B210PowerMeter", daemon=True)
         self.thread.start()
         self.app.event_log.info(
@@ -1969,6 +1978,7 @@ class PowerMeterPanel(ttk.LabelFrame):
         else:
             self.thread = None
             self.meter = None
+            self.active_meter_config = None
             self.status_var.set("SDR RELEASED")
             self.owner_var.set("SDR released for other apps")
             self.app.state_store.reset_power("SDR RELEASED")
@@ -1978,6 +1988,17 @@ class PowerMeterPanel(ttk.LabelFrame):
         thread = self.thread
         if thread and thread.is_alive():
             thread.join(timeout=timeout)
+
+    def pending_hardware_config_message(self) -> str:
+        if not (self.thread and self.thread.is_alive()):
+            return "Start B210 power before measurement."
+        try:
+            pending = self.meter_config_from_fields()
+        except Exception as exc:
+            return str(exc)
+        if pending != self.active_meter_config:
+            return "B210 settings changed; press SDR Power On to restart with the new settings."
+        return ""
 
     def power_loop(self, config: B210PowerMeterConfig) -> None:
         try:
@@ -2126,6 +2147,7 @@ class PowerMeterPanel(ttk.LabelFrame):
         return "UNCAL"
 
     def set_status(self, text: str) -> None:
+        self.active_meter_config = None
         self.status_var.set(f"SDR FAULT: {text}")
         self.owner_var.set("SDR fault; release before other apps use B210")
         self.app.state_store.set_power(PowerRunState.FAULT, message=text)
@@ -2136,6 +2158,7 @@ class PowerMeterPanel(ttk.LabelFrame):
         if self.stop_event.is_set():
             self.reset_measurements(clear_history=True)
             self.active_calibration = None
+            self.active_meter_config = None
             self.status_var.set("SDR RELEASED")
             self.owner_var.set("SDR released for other apps")
             self.app.state_store.reset_power("SDR RELEASED")
@@ -3275,6 +3298,10 @@ class WT6App(tk.Tk):
         except RuntimeError as exc:
             dialog.set_status(str(exc))
             return
+        pending_message = self.power_panel.pending_hardware_config_message()
+        if pending_message:
+            dialog.set_status(pending_message)
+            return
         if self.power_panel.current_power_measurement(config.antenna_name) is None:
             channel = self.power_panel.power_channel_for_antenna(config.antenna_name)
             dialog.set_status(f"Start B210 power and wait for CH {channel} readings before scanning.")
@@ -3518,8 +3545,13 @@ class WT6App(tk.Tk):
         if antenna_name not in self.sessions:
             dialog.set_status("Connect and select an antenna before Y Factor measurement.")
             return
+        pending_message = self.power_panel.pending_hardware_config_message()
+        if pending_message:
+            dialog.set_status(pending_message)
+            return
         if self.power_panel.current_power_measurement(antenna_name) is None:
-            dialog.set_status("Start B210 power and wait for readings before Y Factor measurement.")
+            channel = self.power_panel.power_channel_for_antenna(antenna_name)
+            dialog.set_status(f"Start B210 power and wait for CH {channel} readings before Y Factor measurement.")
             return
         if not (1 <= count <= 50):
             dialog.set_status("Measurements must be 1..50.")
